@@ -14,9 +14,12 @@ class OIS_CC_Admin {
 
 	public function __construct() {
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
+		add_action( 'admin_menu', array( $this, 'dedupe_menu' ), 999 );
 		add_action( 'admin_init', array( $this, 'register_settings' ) );
 		add_filter( 'map_meta_cap', array( $this, 'map_meta_cap' ), 10, 4 );
 		add_action( 'admin_post_ois_cc_export_csv', array( $this, 'handle_export' ) );
+		add_action( 'admin_post_ois_cc_add_user', array( $this, 'handle_add_user' ) );
+		add_action( 'admin_post_ois_cc_remove_user', array( $this, 'handle_remove_user' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
 	}
 
@@ -59,9 +62,40 @@ class OIS_CC_Admin {
 			26
 		);
 
+		// Every submenu row is registered explicitly and only here — Courses' CPT
+		// registration sets show_in_menu => false specifically so there's no second,
+		// WordPress-internal registration path racing with this one. dedupe_menu()
+		// below is a belt-and-suspenders cleanup for WordPress's own auto-inserted
+		// "first submenu repeats the parent label" row, which can still appear
+		// depending on hook-execution order.
 		add_submenu_page( 'ois-cc-transactions', 'Transactions', 'Transactions', self::CAP, 'ois-cc-transactions', array( $this, 'render_transactions_page' ) );
 		add_submenu_page( 'ois-cc-transactions', 'Courses', 'Courses', 'edit_posts', 'edit.php?post_type=' . OIS_CC_Courses::POST_TYPE );
 		add_submenu_page( 'ois-cc-transactions', 'Settings', 'Settings', 'manage_options', 'ois-cc-settings', array( $this, 'render_settings_page' ) );
+	}
+
+	/**
+	 * Safety net: strips any duplicate row WordPress may have auto-inserted into
+	 * this menu's submenu (same target slug appearing twice, one of them labelled
+	 * with the top-level menu's own title). Runs late (priority 999) so every
+	 * plugin's admin_menu registration — including this one and core's CPT wiring —
+	 * has already run.
+	 */
+	public function dedupe_menu() {
+		global $submenu;
+		if ( empty( $submenu['ois-cc-transactions'] ) ) {
+			return;
+		}
+
+		$seen = array();
+		foreach ( $submenu['ois-cc-transactions'] as $key => $item ) {
+			$slug = $item[2];
+			if ( isset( $seen[ $slug ] ) ) {
+				unset( $submenu['ois-cc-transactions'][ $key ] );
+				continue;
+			}
+			$seen[ $slug ] = true;
+		}
+		$submenu['ois-cc-transactions'] = array_values( $submenu['ois-cc-transactions'] );
 	}
 
 	public function enqueue_admin_assets( $hook ) {
@@ -174,7 +208,10 @@ class OIS_CC_Admin {
 		register_setting( 'ois_cc_settings', 'ois_cc_sms_api_key', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'ois_cc_settings', 'ois_cc_test_mode', array( 'sanitize_callback' => 'absint' ) );
 		register_setting( 'ois_cc_settings', 'ois_cc_access_roles', array( 'sanitize_callback' => array( $this, 'sanitize_role_list' ) ) );
-		register_setting( 'ois_cc_settings', 'ois_cc_access_users', array( 'sanitize_callback' => array( $this, 'sanitize_user_list' ) ) );
+		// ois_cc_access_users is intentionally NOT part of this settings group — it's
+		// managed by its own add/remove actions below (one user at a time, with an
+		// explicit Remove button) instead of a multi-select box, which is a confusing
+		// way to remove just one person from a longer list.
 	}
 
 	public function sanitize_role_list( $value ) {
@@ -182,8 +219,35 @@ class OIS_CC_Admin {
 		return array_values( array_intersect( (array) $value, $editable ) );
 	}
 
-	public function sanitize_user_list( $value ) {
-		return array_values( array_filter( array_map( 'intval', (array) $value ) ) );
+	public function handle_add_user() {
+		check_admin_referer( 'ois_cc_add_user' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( 'You do not have access to this page.' );
+		}
+
+		$user_id = isset( $_POST['user_id'] ) ? absint( $_POST['user_id'] ) : 0;
+		if ( $user_id && get_userdata( $user_id ) ) {
+			$allowed   = (array) get_option( 'ois_cc_access_users', array() );
+			$allowed[] = $user_id;
+			update_option( 'ois_cc_access_users', array_values( array_unique( array_map( 'intval', $allowed ) ) ) );
+		}
+
+		wp_safe_redirect( admin_url( 'admin.php?page=ois-cc-settings' ) );
+		exit;
+	}
+
+	public function handle_remove_user() {
+		check_admin_referer( 'ois_cc_remove_user' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( 'You do not have access to this page.' );
+		}
+
+		$user_id = isset( $_GET['user_id'] ) ? absint( $_GET['user_id'] ) : 0;
+		$allowed = (array) get_option( 'ois_cc_access_users', array() );
+		update_option( 'ois_cc_access_users', array_values( array_diff( array_map( 'intval', $allowed ), array( $user_id ) ) ) );
+
+		wp_safe_redirect( admin_url( 'admin.php?page=ois-cc-settings' ) );
+		exit;
 	}
 
 	public function render_settings_page() {
@@ -233,21 +297,49 @@ class OIS_CC_Admin {
 							<?php endforeach; ?>
 						</td>
 					</tr>
-					<tr>
-						<th><label for="ois_cc_access_users">Allowed Users</label></th>
-						<td>
-							<select id="ois_cc_access_users" name="ois_cc_access_users[]" multiple size="8" style="min-width:320px;">
-								<?php foreach ( get_users( array( 'fields' => array( 'ID', 'display_name', 'user_login' ) ) ) as $u ) : ?>
-									<option value="<?php echo esc_attr( $u->ID ); ?>" <?php selected( in_array( $u->ID, $allowed_users, true ) ); ?>><?php echo esc_html( $u->display_name . ' (' . $u->user_login . ')' ); ?></option>
-								<?php endforeach; ?>
-							</select>
-							<p class="description">Ctrl/Cmd-click to select multiple users.</p>
-						</td>
-					</tr>
 				</table>
 
 				<?php submit_button(); ?>
 			</form>
+
+			<div class="ois-cc-table-card" style="margin-top:20px;">
+				<h2>Allowed Users</h2>
+				<p class="description">Individually granted, in addition to the roles above.</p>
+				<?php if ( $allowed_users ) : ?>
+					<ul class="ois-cc-user-list">
+						<?php foreach ( $allowed_users as $uid ) :
+							$u = get_userdata( $uid );
+							if ( ! $u ) {
+								continue;
+							}
+							$remove_url = wp_nonce_url( admin_url( 'admin-post.php?action=ois_cc_remove_user&user_id=' . $uid ), 'ois_cc_remove_user' );
+							?>
+							<li>
+								<span><?php echo esc_html( $u->display_name . ' (' . $u->user_login . ')' ); ?></span>
+								<a href="<?php echo esc_url( $remove_url ); ?>" class="button button-small" onclick="return confirm('Remove access for &quot;<?php echo esc_js( $u->display_name ); ?>&quot;?');">Remove</a>
+							</li>
+						<?php endforeach; ?>
+					</ul>
+				<?php else : ?>
+					<p><em>No individual users granted access yet.</em></p>
+				<?php endif; ?>
+
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin-top:12px;">
+					<input type="hidden" name="action" value="ois_cc_add_user">
+					<?php wp_nonce_field( 'ois_cc_add_user' ); ?>
+					<select name="user_id">
+						<option value="">— Select a user —</option>
+						<?php foreach ( get_users( array( 'fields' => array( 'ID', 'display_name', 'user_login' ) ) ) as $u ) :
+							if ( in_array( $u->ID, $allowed_users, true ) ) {
+								continue;
+							}
+							?>
+							<option value="<?php echo esc_attr( $u->ID ); ?>"><?php echo esc_html( $u->display_name . ' (' . $u->user_login . ')' ); ?></option>
+						<?php endforeach; ?>
+					</select>
+					<?php submit_button( 'Add User', 'secondary', 'submit', false ); ?>
+				</form>
+			</div>
 		</div>
 		<?php
 	}

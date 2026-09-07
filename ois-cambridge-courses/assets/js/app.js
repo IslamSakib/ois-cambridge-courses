@@ -262,12 +262,19 @@
 		clearInterval( resendTimer );
 		setState( { resendCooldown: 60 } );
 		resendTimer = setInterval( function () {
-			if ( state.resendCooldown <= 1 ) {
+			state.resendCooldown = Math.max( 0, state.resendCooldown - 1 );
+
+			// Update the countdown in place instead of calling render() — a full
+			// re-render every second would recreate the OTP input boxes and wipe
+			// out whatever digits the student has typed so far.
+			var resendBtn = document.getElementById( 'ois-cc-resend' );
+			if ( resendBtn ) {
+				resendBtn.textContent = state.resendCooldown > 0 ? 'Resend in ' + state.resendCooldown + 's' : 'Resend OTP';
+				resendBtn.disabled = state.resendCooldown > 0;
+			}
+
+			if ( state.resendCooldown <= 0 ) {
 				clearInterval( resendTimer );
-				setState( { resendCooldown: 0 } );
-			} else {
-				state.resendCooldown -= 1;
-				render();
 			}
 		}, 1000 );
 	}

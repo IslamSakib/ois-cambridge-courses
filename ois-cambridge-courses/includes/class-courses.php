@@ -34,7 +34,10 @@ class OIS_CC_Courses {
 				),
 				'public'       => false,
 				'show_ui'      => true,
-				'show_in_menu' => 'ois-cc-transactions',
+				// Not auto-placed in the menu (show_in_menu => false) — OIS_CC_Admin::register_menu()
+				// adds the "Courses" submenu item explicitly instead, so there's exactly one
+				// registration path and no race with WordPress's own submenu auto-insertion.
+				'show_in_menu' => false,
 				'supports'     => array( 'title', 'editor', 'excerpt', 'thumbnail', 'page-attributes' ),
 				'has_archive'  => false,
 			)
@@ -97,13 +100,19 @@ class OIS_CC_Courses {
 	 */
 	public static function get_course_data( $post ) {
 		$post = get_post( $post );
-		if ( ! $post ) {
+		// Called with a raw REST-supplied ID (create-order), so this must reject
+		// any non-course or unpublished post itself — not just trust callers —
+		// or arbitrary draft/private post content leaks through the order response.
+		if ( ! $post || self::POST_TYPE !== $post->post_type || 'publish' !== $post->post_status ) {
 			return null;
 		}
 		return array(
 			'id'         => $post->ID,
-			'title'      => get_the_title( $post ),
-			'excerpt'    => has_excerpt( $post ) ? get_the_excerpt( $post ) : wp_trim_words( $post->post_content, 20 ),
+			// get_the_title() returns HTML-entity-encoded text (e.g. "&#038;") meant for
+			// direct echo; decode it since the frontend JS treats this as plain text and
+			// re-escapes it itself before inserting into the DOM.
+			'title'      => wp_specialchars_decode( get_the_title( $post ), ENT_QUOTES ),
+			'excerpt'    => wp_specialchars_decode( has_excerpt( $post ) ? get_the_excerpt( $post ) : wp_trim_words( $post->post_content, 20 ), ENT_QUOTES ),
 			'description'=> apply_filters( 'the_content', $post->post_content ),
 			'image'      => get_the_post_thumbnail_url( $post, 'medium_large' ),
 			'category'   => get_post_meta( $post->ID, '_ois_cc_category', true ),
