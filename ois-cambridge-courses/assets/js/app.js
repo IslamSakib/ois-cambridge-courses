@@ -177,7 +177,7 @@
 	}
 
 	function supportHtml() {
-		return 'Still stuck? Email <a href="mailto:' + OIS_CC.supportEmail + '">' + esc( OIS_CC.supportEmail ) + '</a>';
+		return 'Still need help? Please contact us at <a href="mailto:' + OIS_CC.supportEmail + '">' + esc( OIS_CC.supportEmail ) + '</a>.';
 	}
 
 	function errorHtml() {
