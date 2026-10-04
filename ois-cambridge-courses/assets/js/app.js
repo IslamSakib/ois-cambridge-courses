@@ -217,11 +217,11 @@
 	}
 
 	function split( paneHtml, tagline ) {
-		var img = OIS_CC.image ? ' style="background-image:url(\'' + encodeURI( OIS_CC.image ).replace( /['()]/g, escape ) + '\')"' : '';
 		return stage(
 			'<div class="ois-cc-split">' +
 				'<section class="ois-cc-pane">' + logoHtml() + '<div class="ois-cc-pane-body">' + paneHtml + '</div></section>' +
-				'<figure class="ois-cc-visual' + ( OIS_CC.image ? '' : ' no-image' ) + '"' + img + '>' +
+				'<figure class="ois-cc-visual' + ( OIS_CC.image ? '' : ' no-image' ) + '">' +
+					( OIS_CC.image ? '<img src="' + esc( OIS_CC.image ) + '" alt="">' : '' ) +
 					dashesSvg( 'is-top' ) +
 					'<figcaption class="ois-cc-visual-blob"><span class="ois-cc-tagline">' + tagline + '</span></figcaption>' +
 					dashesSvg( 'is-bottom' ) +

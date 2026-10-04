@@ -74,6 +74,7 @@
 	display: grid;
 	grid-template-columns: minmax(360px, 500px) minmax(0, 1fr); /* form stays form-sized; photo takes the rest */
 	min-height: 480px;
+	max-width: 1240px; margin-inline: auto; /* caps the photo's height on very wide sections */
 	border-radius: 20px;
 	box-shadow: 0 30px 60px -30px rgba(10, 10, 50, .55);
 }
@@ -91,10 +92,11 @@
 	position: relative;
 	overflow: hidden;
 	border-radius: 0 20px 20px 0;
-	background-color: var(--ois-navy-deep);
-	background-size: cover;
-	background-position: 0% 30%; /* keep the photo's top-left logo in frame */
+	background-color: var(--ois-blush); /* fills any height left under the photo, blending into the blob */
 }
+/* A real <img> at its natural ratio: the photo is never cropped, whatever the column size. */
+.ois-cc-app .ois-cc-visual img { display: block; width: 100%; height: auto; max-width: none; margin: 0; border-radius: 0; }
+.ois-cc-app .ois-cc-visual { padding: 0 0 0 20px; } /* the strip the form card tucks over — keeps it off the photo */
 .ois-cc-visual.no-image {
 	background-image:
 		radial-gradient(circle at 20% 25%, rgba(255, 255, 255, .10) 0 2px, transparent 3px),
@@ -103,18 +105,11 @@
 }
 .ois-cc-visual-blob {
 	position: absolute; right: -1px; bottom: -1px; /* -1px hides sub-pixel photo bleed */
-	width: 72%; height: 46%;
+	width: 72%; height: 36%; /* stays below the faces in the photo (lowest chin sits at ~58%) */
 	display: flex; align-items: flex-end; justify-content: flex-end;
 	padding: 0 clamp(22px, 4vw, 52px) clamp(22px, 4vw, 48px) 22%;
 	background: var(--ois-blush);
 	border-top-left-radius: 70% 82%;
-}
-.ois-cc-visual-blob::before { /* the soft "shoulder" bump from the reference */
-	content: ""; position: absolute;
-	right: 0; top: -22%;
-	width: 34%; height: 44%;
-	background: var(--ois-blush);
-	border-radius: 60% 0 0 40% / 70% 0 0 30%;
 }
 .ois-cc-tagline {
 	position: relative;
@@ -132,7 +127,7 @@
 
 .ois-cc-dashes { position: absolute; width: 96px; height: auto; pointer-events: none; }
 .ois-cc-dashes.is-top { top: 3%; right: 5%; width: 64px; fill: var(--ois-ink); opacity: .85; } /* sky, top-right: clear of the logo and faces */
-.ois-cc-dashes.is-bottom { bottom: 43%; right: 3%; width: 78px; fill: var(--ois-maroon); z-index: 1; }
+.ois-cc-dashes.is-bottom { bottom: 37%; right: 3%; width: 78px; fill: var(--ois-maroon); z-index: 1; }
 
 /* ---------- brand mark ---------- */
 .ois-cc-logo { display: flex; align-items: center; gap: 12px; }
@@ -386,10 +381,11 @@
 @media (max-width: 900px) {
 	.ois-cc-split { grid-template-columns: 1fr; min-height: 0; }
 	.ois-cc-visual { order: -1; min-height: 250px; border-radius: 20px 20px 0 0; }
+	.ois-cc-app .ois-cc-visual { padding: 0 0 20px; }
 	.ois-cc-pane { margin-right: 0; margin-top: -20px; border-radius: 20px; }
 	.ois-cc-pane-body { max-width: none; padding-top: 22px; }
-	.ois-cc-visual-blob { width: 72%; height: 66%; padding-bottom: 44px; }
-	.ois-cc-tagline { font-size: clamp(22px, 5.5vw, 32px); }
+	.ois-cc-visual-blob { padding-bottom: 30px; }
+	.ois-cc-tagline { font-size: clamp(17px, 4.6vw, 30px); }
 	.ois-cc-dashes.is-top { width: 64px; top: 10%; right: 12%; }
 	.ois-cc-dashes.is-bottom { display: none; }
 	.ois-cc-courses-layout { grid-template-columns: 1fr; }
