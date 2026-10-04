@@ -14,7 +14,7 @@ WordPress plugin for Oxford International School: a Student-ID + OTP verified pu
 Sidebar menu **Cambridge Courses**:
 - **Transactions** — colorful KPI cards + a searchable, sortable, paginated table of every order, with This Week / This Month / This Year filters and CSV export.
 - **Courses** — manage the courses/exams (price, discount price, category, level, age group, duration, description). Level, age group, duration and description are optional; whatever is filled in shows in the opened course card.
-- **Settings** — FEMS student-records API, SMS OTP gateway, Moneybag payment gateway, test mode, and **access control**: pick which WordPress roles and/or individual users (besides Administrators) can see the Transactions dashboard.
+- **Settings** — FEMS student-records API, SMS OTP gateway, Moneybag payment gateway, test mode, and **access control**: pick which WordPress roles and/or individual users (besides Administrators) can see the Transactions dashboard. Or just give a user the **Cambridge Courses Accounts** role: Transactions is then the only admin screen they get (plus their own Profile).
 
 ## Payment gateway (Moneybag)
 

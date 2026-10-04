@@ -2,7 +2,7 @@
 /**
  * Plugin Name: OIS Cambridge Courses
  * Description: Student-ID + OTP verified checkout flow for Oxford International School's Cambridge courses. Drop the [ois_cambridge_courses] shortcode into any page (works inside Elementor's Shortcode widget).
- * Version: 1.8.8
+ * Version: 1.8.9
  * Author: Sakib Islam
  * Author URI: tel:01950025990
  * Text Domain: ois-cc
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'OIS_CC_VERSION', '1.8.8' );
+define( 'OIS_CC_VERSION', '1.8.9' );
 define( 'OIS_CC_FILE', __FILE__ );
 define( 'OIS_CC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'OIS_CC_URL', plugin_dir_url( __FILE__ ) );

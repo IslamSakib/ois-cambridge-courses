@@ -112,5 +112,14 @@ check( 'invalid token rejected', ! OIS_CC_REST_API::captcha_ok( 'tok' ) );
 $GLOBALS['remote'] = new WP_Error( 'http' );
 check( 'Google unreachable -> rejected', ! OIS_CC_REST_API::captcha_ok( 'tok' ) );
 
+// Access: the accounts role sees Transactions, any other non-admin does not.
+function user_can( $id, $cap ) { return false; }
+function get_userdata( $id ) { return (object) array( 'roles' => $GLOBALS['roles'] ); }
+$admin = new OIS_CC_Admin();
+$GLOBALS['roles'] = array( OIS_CC_Admin::ROLE );
+check( 'accounts role granted transactions', array( 'exist' ) === $admin->map_meta_cap( array(), OIS_CC_Admin::CAP, 5, array() ) );
+$GLOBALS['roles'] = array( 'contributor' );
+check( 'other role denied transactions', array( 'do_not_allow' ) === $admin->map_meta_cap( array(), OIS_CC_Admin::CAP, 5, array() ) );
+
 echo $fails ? "\n$fails FAILED\n" : "\nALL PASSED\n";
 exit( $fails ? 1 : 0 );

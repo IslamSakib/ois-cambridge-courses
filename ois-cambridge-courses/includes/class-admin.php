@@ -12,7 +12,13 @@ class OIS_CC_Admin {
 
 	const CAP = 'ois_cc_view_transactions';
 
+	// Assign this role to a user and Cambridge Courses → Transactions is the only
+	// admin screen they get (plus their own Profile).
+	const ROLE = 'ois_cc_accounts';
+
 	public function __construct() {
+		add_action( 'init', array( $this, 'register_role' ) );
+		add_action( 'admin_init', array( $this, 'lock_role_to_module' ) );
 		add_action( 'admin_menu', array( $this, 'register_menu' ) );
 		add_action( 'admin_menu', array( $this, 'dedupe_menu' ), 999 );
 		add_action( 'admin_init', array( $this, 'register_settings' ) );
@@ -48,6 +54,32 @@ class OIS_CC_Admin {
 	}
 
 	/**
+	 * Runs on init rather than activation so the role also appears after a
+	 * plain plugin update. get_role() is an in-memory lookup.
+	 */
+	public function register_role() {
+		if ( ! get_role( self::ROLE ) ) {
+			add_role( self::ROLE, 'Cambridge Courses Accounts', array( 'read' => true ) );
+		}
+	}
+
+	private static function is_role_user() {
+		return in_array( self::ROLE, (array) wp_get_current_user()->roles, true );
+	}
+
+	/**
+	 * The role's users have no use for the WordPress Dashboard — send them to
+	 * Transactions instead (this is also where they land after login).
+	 */
+	public function lock_role_to_module() {
+		global $pagenow;
+		if ( 'index.php' === $pagenow && self::is_role_user() ) {
+			wp_safe_redirect( admin_url( 'admin.php?page=ois-cc-transactions' ) );
+			exit;
+		}
+	}
+
+	/**
 	 * Grants the view-transactions capability to Administrators always,
 	 * plus whichever users/roles are picked on the Settings page.
 	 */
@@ -68,7 +100,7 @@ class OIS_CC_Admin {
 		$allowed_users = (array) get_option( 'ois_cc_access_users', array() );
 		$allowed_roles = (array) get_option( 'ois_cc_access_roles', array() );
 
-		if ( in_array( $user_id, array_map( 'intval', $allowed_users ), true ) || array_intersect( $allowed_roles, (array) $user->roles ) ) {
+		if ( in_array( self::ROLE, (array) $user->roles, true ) || in_array( $user_id, array_map( 'intval', $allowed_users ), true ) || array_intersect( $allowed_roles, (array) $user->roles ) ) {
 			return array( 'exist' );
 		}
 
@@ -95,6 +127,10 @@ class OIS_CC_Admin {
 		add_submenu_page( 'ois-cc-transactions', 'Transactions', 'Transactions', self::CAP, 'ois-cc-transactions', array( $this, 'render_transactions_page' ) );
 		add_submenu_page( 'ois-cc-transactions', 'Courses', 'Courses', 'edit_posts', 'edit.php?post_type=' . OIS_CC_Courses::POST_TYPE );
 		add_submenu_page( 'ois-cc-transactions', 'Settings', 'Settings', 'manage_options', 'ois-cc-settings', array( $this, 'render_settings_page' ) );
+
+		if ( self::is_role_user() ) {
+			remove_menu_page( 'index.php' );
+		}
 	}
 
 	/**
