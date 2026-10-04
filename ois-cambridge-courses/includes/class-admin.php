@@ -68,15 +68,22 @@ class OIS_CC_Admin {
 	}
 
 	/**
-	 * The role's users have no use for the WordPress Dashboard — send them to
-	 * Transactions instead (this is also where they land after login).
+	 * Allowlist, not blocklist: other plugins (e.g. DearFlip) expose admin screens
+	 * to any logged-in user, so every admin page except Transactions and the
+	 * user's own Profile is sent to Transactions (also where they land after
+	 * login). admin-post.php stays open for the CSV export.
 	 */
 	public function lock_role_to_module() {
 		global $pagenow;
-		if ( 'index.php' === $pagenow && self::is_role_user() ) {
-			wp_safe_redirect( admin_url( 'admin.php?page=ois-cc-transactions' ) );
-			exit;
+		if ( ! self::is_role_user() ) {
+			return;
 		}
+		$on_transactions = 'admin.php' === $pagenow && isset( $_GET['page'] ) && 'ois-cc-transactions' === $_GET['page'];
+		if ( $on_transactions || in_array( $pagenow, array( 'profile.php', 'admin-post.php', 'admin-ajax.php' ), true ) ) {
+			return;
+		}
+		wp_safe_redirect( admin_url( 'admin.php?page=ois-cc-transactions' ) );
+		exit;
 	}
 
 	/**
@@ -127,10 +134,6 @@ class OIS_CC_Admin {
 		add_submenu_page( 'ois-cc-transactions', 'Transactions', 'Transactions', self::CAP, 'ois-cc-transactions', array( $this, 'render_transactions_page' ) );
 		add_submenu_page( 'ois-cc-transactions', 'Courses', 'Courses', 'edit_posts', 'edit.php?post_type=' . OIS_CC_Courses::POST_TYPE );
 		add_submenu_page( 'ois-cc-transactions', 'Settings', 'Settings', 'manage_options', 'ois-cc-settings', array( $this, 'render_settings_page' ) );
-
-		if ( self::is_role_user() ) {
-			remove_menu_page( 'index.php' );
-		}
 	}
 
 	/**
@@ -141,7 +144,17 @@ class OIS_CC_Admin {
 	 * has already run.
 	 */
 	public function dedupe_menu() {
-		global $submenu;
+		global $menu, $submenu;
+
+		// Accounts role: hide every top-level menu but ours and Profile.
+		if ( self::is_role_user() ) {
+			foreach ( (array) $menu as $item ) {
+				if ( ! in_array( $item[2], array( 'ois-cc-transactions', 'profile.php' ), true ) ) {
+					remove_menu_page( $item[2] );
+				}
+			}
+		}
+
 		if ( empty( $submenu['ois-cc-transactions'] ) ) {
 			return;
 		}
