@@ -4,7 +4,7 @@
 
 .ois-cc-stats {
 	display: grid;
-	grid-template-columns: repeat(4, 1fr);
+	grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
 	gap: 16px;
 	margin-bottom: 20px;
 }
@@ -19,7 +19,8 @@
 }
 .ois-cc-stat-blue   { background: linear-gradient(135deg,#2563eb,#1d4ed8); }
 .ois-cc-stat-green  { background: linear-gradient(135deg,#16a34a,#0a7d31); }
-.ois-cc-stat-amber  { background: linear-gradient(135deg,#f59e0b,#b45309); }
+.ois-cc-stat-red    { background: linear-gradient(135deg,#dc2626,#9b0a0d); }
+.ois-cc-stat-slate  { background: linear-gradient(135deg,#64748b,#334155); }
 .ois-cc-stat-purple { background: linear-gradient(135deg,#8b5cf6,#6d28d9); }
 .ois-cc-stat-label { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; opacity: .9; }
 .ois-cc-stat-value { font-size: 26px; font-weight: 700; }
@@ -44,3 +45,4 @@
 }
 .ois-cc-muted { color: #64748b; font-size: 12px; }
 .ois-cc-txn { color: #64748b; font-size: 11px; }
+.ois-cc-date { display: inline-flex; align-items: center; gap: 4px; margin-right: 6px; }

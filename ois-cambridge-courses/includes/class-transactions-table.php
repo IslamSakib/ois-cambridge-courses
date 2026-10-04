@@ -44,18 +44,25 @@ class OIS_CC_Transactions_Table extends WP_List_Table {
 		);
 	}
 
-	protected function get_current_filters() {
+	/**
+	 * Filters from the current request. Static so the stat cards and CSV
+	 * export (admin-post.php, no list table) read exactly the same values.
+	 */
+	public static function current_filters() {
 		return array(
 			'search' => isset( $_REQUEST['s'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['s'] ) ) : '',
 			'range'  => isset( $_REQUEST['range'] ) ? sanitize_key( $_REQUEST['range'] ) : 'all',
 			'status' => isset( $_REQUEST['status'] ) ? sanitize_key( $_REQUEST['status'] ) : '',
+			'course' => isset( $_REQUEST['course'] ) ? sanitize_text_field( wp_unslash( $_REQUEST['course'] ) ) : '',
+			'from'   => isset( $_REQUEST['from'] ) ? OIS_CC_Orders::valid_date( sanitize_text_field( wp_unslash( $_REQUEST['from'] ) ) ) : '',
+			'to'     => isset( $_REQUEST['to'] ) ? OIS_CC_Orders::valid_date( sanitize_text_field( wp_unslash( $_REQUEST['to'] ) ) ) : '',
 		);
 	}
 
 	public function prepare_items() {
 		$per_page = 20;
 		$paged    = $this->get_pagenum();
-		$filters  = $this->get_current_filters();
+		$filters  = self::current_filters();
 
 		$orderby = isset( $_REQUEST['orderby'] ) ? sanitize_key( $_REQUEST['orderby'] ) : 'date';
 		$order   = isset( $_REQUEST['order'] ) ? sanitize_key( $_REQUEST['order'] ) : 'desc';
@@ -102,22 +109,23 @@ class OIS_CC_Transactions_Table extends WP_List_Table {
 	}
 
 	public function column_payment_method( $item ) {
-		return $item['payment_method'] ? esc_html( ucfirst( $item['payment_method'] ) ) : '—';
+		// Moneybag reports methods in mixed case (MASTER, NAGAD, bkash).
+		return $item['payment_method'] ? esc_html( ucwords( strtolower( $item['payment_method'] ) ) ) : '—';
 	}
 
 	public function column_status( $item ) {
-		$status = $item['status'] ? $item['status'] : 'pending';
-		$map    = array(
-			'paid'    => array( '#0a7d31', '#e6f6ea' ),
-			'pending' => array( '#996800', '#fff6e0' ),
-			'failed'  => array( '#b32d2e', '#fde8e8' ),
+		$key = OIS_CC_Orders::status_key( $item['status'] );
+		$map = array(
+			'success'  => array( '#0a7d31', '#e6f6ea' ),
+			'failed'   => array( '#b32d2e', '#fde8e8' ),
+			'canceled' => array( '#475569', '#eef1f5' ),
 		);
-		list( $fg, $bg ) = isset( $map[ $status ] ) ? $map[ $status ] : $map['pending'];
+		list( $fg, $bg ) = $map[ $key ];
 		return sprintf(
 			'<span class="ois-cc-badge" style="color:%s;background:%s">%s</span>',
 			esc_attr( $fg ),
 			esc_attr( $bg ),
-			esc_html( ucfirst( $status ) )
+			esc_html( OIS_CC_Orders::STATUS_LABELS[ $key ] )
 		);
 	}
 
@@ -130,29 +138,42 @@ class OIS_CC_Transactions_Table extends WP_List_Table {
 	}
 
 	/**
-	 * Adds the date-range and status dropdown filters above the table,
-	 * next to the native search box.
+	 * Adds the course, date-range and status filters above the table,
+	 * next to the native search box. A From/To date overrides the preset.
+	 * Filters apply as soon as a value changes (see render_transactions_page);
+	 * the Filter button only exists as a no-JS fallback.
 	 */
 	protected function extra_tablenav( $which ) {
 		if ( 'top' !== $which ) {
 			return;
 		}
-		$filters = $this->get_current_filters();
+		$filters = self::current_filters();
 		?>
 		<div class="alignleft actions">
+			<select name="course">
+				<option value="">All Courses</option>
+				<?php foreach ( OIS_CC_Orders::get_course_titles() as $title ) : ?>
+					<option value="<?php echo esc_attr( $title ); ?>" <?php selected( $filters['course'], $title ); ?>><?php echo esc_html( $title ); ?></option>
+				<?php endforeach; ?>
+			</select>
 			<select name="range">
 				<?php foreach ( array( 'all' => 'All Time', 'week' => 'This Week', 'month' => 'This Month', 'year' => 'This Year' ) as $key => $label ) : ?>
 					<option value="<?php echo esc_attr( $key ); ?>" <?php selected( $filters['range'], $key ); ?>><?php echo esc_html( $label ); ?></option>
 				<?php endforeach; ?>
 			</select>
+			<label class="ois-cc-date">From <input type="date" name="from" value="<?php echo esc_attr( $filters['from'] ); ?>" max="<?php echo esc_attr( $filters['to'] ); ?>"></label>
+			<label class="ois-cc-date">To <input type="date" name="to" value="<?php echo esc_attr( $filters['to'] ); ?>" min="<?php echo esc_attr( $filters['from'] ); ?>"></label>
 			<select name="status">
 				<option value="">All Statuses</option>
-				<?php foreach ( array( 'paid' => 'Paid', 'pending' => 'Pending', 'failed' => 'Failed' ) as $key => $label ) : ?>
+				<?php foreach ( OIS_CC_Orders::STATUS_LABELS as $key => $label ) : ?>
 					<option value="<?php echo esc_attr( $key ); ?>" <?php selected( $filters['status'], $key ); ?>><?php echo esc_html( $label ); ?></option>
 				<?php endforeach; ?>
 			</select>
-			<?php submit_button( 'Filter', '', 'filter_action', false ); ?>
-			<a class="button" href="<?php echo esc_url( wp_nonce_url( add_query_arg( array_merge( $filters, array( 'action' => 'ois_cc_export_csv' ) ), admin_url( 'admin-post.php' ) ), 'ois_cc_export_csv' ) ); ?>">Export CSV</a>
+			<noscript><?php submit_button( 'Filter', '', 'filter_action', false ); ?></noscript>
+			<?php if ( array_filter( array( $filters['course'], $filters['from'], $filters['to'], $filters['status'], $filters['search'] ) ) || 'all' !== $filters['range'] ) : ?>
+				<a class="button" href="<?php echo esc_url( admin_url( 'admin.php?page=ois-cc-transactions' ) ); ?>">Reset</a>
+			<?php endif; ?>
+			<a class="button" href="<?php echo esc_url( wp_nonce_url( add_query_arg( urlencode_deep( array_merge( $filters, array( 's' => $filters['search'], 'action' => 'ois_cc_export_csv' ) ) ), admin_url( 'admin-post.php' ) ), 'ois_cc_export_csv' ) ); ?>">Export CSV</a>
 		</div>
 		<?php
 	}

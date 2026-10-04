@@ -137,7 +137,7 @@ class OIS_CC_Courses {
 	}
 
 	/**
-	 * Seed the 7 Cambridge courses on activation so the shortcode isn't
+	 * Seed the 8 Cambridge English exams on activation so the shortcode isn't
 	 * empty on first test. Admin can edit/replace these from wp-admin.
 	 */
 	public static function seed_default_courses() {
@@ -146,32 +146,31 @@ class OIS_CC_Courses {
 		}
 
 		$courses = array(
-			array( 'Cambridge IGCSE Mathematics', 'Cambridge IGCSE', '6 months', 8000, 10000 ),
-			array( 'Cambridge IGCSE Physics', 'Cambridge IGCSE', '6 months', 8000, 10000 ),
-			array( 'Cambridge IGCSE Chemistry', 'Cambridge IGCSE', '6 months', 8000, 10000 ),
-			array( 'Cambridge IGCSE Biology', 'Cambridge IGCSE', '6 months', 8000, 10000 ),
-			array( 'Cambridge IGCSE English', 'Cambridge IGCSE', '6 months', 7500, 9000 ),
-			array( 'Cambridge AS & A Level Computer Science', 'Cambridge A Level', '9 months', 12000, 15000 ),
-			array( 'Cambridge AS & A Level Business Studies', 'Cambridge A Level', '9 months', 12000, 15000 ),
+			array( 'Pre A1 Starters', 'Cambridge English', 6400 ),
+			array( 'A1 Movers', 'Cambridge English', 6900 ),
+			array( 'A2 Flyers', 'Cambridge English', 7400 ),
+			array( 'A2 Key', 'Cambridge English', 8300 ),
+			array( 'B1 Preliminary', 'Cambridge English', 10400 ),
+			array( 'B2 First', 'Cambridge English', 13700 ),
+			array( 'C1 Advanced', 'Cambridge English', 16300 ),
+			array( 'TKT Per Module', 'Cambridge English', 8350 ),
 		);
 
 		foreach ( $courses as $c ) {
-			list( $title, $category, $duration, $price, $list_price ) = $c;
+			list( $title, $category, $price ) = $c;
 			$post_id = wp_insert_post(
 				array(
 					'post_type'    => self::POST_TYPE,
 					'post_title'   => $title,
-					'post_excerpt' => 'Full syllabus coverage with past-paper practice and mock exams.',
-					'post_content' => 'Full syllabus coverage with past-paper practice, weekly assessments and mock exams, taught by experienced Cambridge-trained faculty at Oxford International School.',
+					'post_excerpt' => 'Cambridge English course offered by Oxford International School.',
+					'post_content' => 'Cambridge English: ' . $title . ' — a course offered by Oxford International School.',
 					'post_status'  => 'publish',
 				)
 			);
 			if ( $post_id && ! is_wp_error( $post_id ) ) {
 				update_post_meta( $post_id, '_ois_cc_category', $category );
 				update_post_meta( $post_id, '_ois_cc_instructor', 'OIS Faculty' );
-				update_post_meta( $post_id, '_ois_cc_duration', $duration );
 				update_post_meta( $post_id, '_ois_cc_price', $price );
-				update_post_meta( $post_id, '_ois_cc_list_price', $list_price );
 			}
 		}
 

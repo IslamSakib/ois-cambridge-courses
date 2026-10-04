@@ -69,8 +69,8 @@ class OIS_CC_Orders {
 				break;
 			case 'status':
 				$status = get_post_meta( $post_id, '_status', true );
-				$color  = 'paid' === $status ? '#0a7d31' : ( 'failed' === $status ? '#b32d2e' : '#996800' );
-				printf( '<strong style="color:%s">%s</strong>', esc_attr( $color ), esc_html( ucfirst( $status ) ) );
+				$color  = 'paid' === $status ? '#0a7d31' : ( 'failed' === $status ? '#b32d2e' : '#64748b' );
+				printf( '<strong style="color:%s">%s</strong>', esc_attr( $color ), esc_html( self::status_label( $status ) ) );
 				break;
 		}
 	}
@@ -97,6 +97,8 @@ class OIS_CC_Orders {
 		update_post_meta( $order_id, '_student_name', $student['name'] );
 		update_post_meta( $order_id, '_student_mobile', $student['mobile'] );
 		update_post_meta( $order_id, '_student_class', isset( $student['class'] ) ? $student['class'] : '' );
+		update_post_meta( $order_id, '_student_section', isset( $student['section'] ) ? $student['section'] : '' );
+		update_post_meta( $order_id, '_student_roll', isset( $student['roll'] ) ? $student['roll'] : '' );
 		update_post_meta( $order_id, '_course_id', $course['id'] );
 		update_post_meta( $order_id, '_course_title', $course['title'] );
 		update_post_meta( $order_id, '_amount', $course['price'] );
@@ -123,6 +125,89 @@ class OIS_CC_Orders {
 	}
 
 	/**
+	 * Admin-facing statuses. "pending" (checkout started, never finished)
+	 * and "canceled" both show as Canceled — the dashboard only speaks in
+	 * Success / Failed / Canceled.
+	 */
+	const STATUS_LABELS = array(
+		'success'  => 'Success',
+		'failed'   => 'Failed',
+		'canceled' => 'Canceled',
+	);
+
+	public static function status_key( $stored ) {
+		if ( 'paid' === $stored ) {
+			return 'success';
+		}
+		return 'failed' === $stored ? 'failed' : 'canceled';
+	}
+
+	public static function status_label( $stored ) {
+		return self::STATUS_LABELS[ self::status_key( $stored ) ];
+	}
+
+	/** Not yet final: a verified Moneybag payment may still turn it into Success. */
+	public static function is_open( $stored ) {
+		return in_array( $stored, array( 'pending', 'canceled', '' ), true );
+	}
+
+	public static function mark_canceled( $order_id ) {
+		update_post_meta( $order_id, '_status', 'canceled' );
+	}
+
+	public static function mark_failed( $order_id, $reason = '' ) {
+		update_post_meta( $order_id, '_status', 'failed' );
+		if ( $reason ) {
+			update_post_meta( $order_id, '_fail_reason', $reason );
+		}
+	}
+
+	/**
+	 * Opaque token used to look up an order after the browser comes back
+	 * from Moneybag's hosted checkout, where the SPA's in-memory session
+	 * token is gone (full page reload) — a random token instead of the
+	 * guessable, sequential order_id sidesteps IDOR on that public lookup.
+	 */
+	public static function ensure_order_token( $order_id ) {
+		$token = get_post_meta( $order_id, '_order_token', true );
+		if ( ! $token ) {
+			$token = wp_generate_password( 24, false );
+			update_post_meta( $order_id, '_order_token', $token );
+		}
+		return $token;
+	}
+
+	public static function get_order_by_token( $token ) {
+		if ( ! $token ) {
+			return null;
+		}
+		$posts = get_posts(
+			array(
+				'post_type'      => self::POST_TYPE,
+				'post_status'    => 'publish',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'meta_key'       => '_order_token',
+				'meta_value'     => $token,
+			)
+		);
+		return $posts ? self::get_order_data( $posts[0] ) : null;
+	}
+
+	public static function get_order_id_by_number( $order_number ) {
+		$posts = get_posts(
+			array(
+				'post_type'      => self::POST_TYPE,
+				'post_status'    => 'publish',
+				'posts_per_page' => 1,
+				'fields'         => 'ids',
+				'title'          => $order_number,
+			)
+		);
+		return $posts ? (int) $posts[0] : 0;
+	}
+
+	/**
 	 * Shared query used by both the admin Transactions table and CSV export,
 	 * so filters/search always match between what's shown and what exports.
 	 */
@@ -135,6 +220,9 @@ class OIS_CC_Orders {
 				'search'   => '',
 				'range'    => 'all',
 				'status'   => '',
+				'course'   => '',
+				'from'     => '', // Y-m-d, inclusive; overrides `range` when set
+				'to'       => '', // Y-m-d, inclusive
 				'orderby'  => 'date',
 				'order'    => 'DESC',
 				'paged'    => 1,
@@ -142,39 +230,7 @@ class OIS_CC_Orders {
 			)
 		);
 
-		$join = "
-			LEFT JOIN {$wpdb->postmeta} pm_sid ON pm_sid.post_id = p.ID AND pm_sid.meta_key = '_student_id'
-			LEFT JOIN {$wpdb->postmeta} pm_sname ON pm_sname.post_id = p.ID AND pm_sname.meta_key = '_student_name'
-			LEFT JOIN {$wpdb->postmeta} pm_course ON pm_course.post_id = p.ID AND pm_course.meta_key = '_course_title'
-			LEFT JOIN {$wpdb->postmeta} pm_amount ON pm_amount.post_id = p.ID AND pm_amount.meta_key = '_amount'
-			LEFT JOIN {$wpdb->postmeta} pm_status ON pm_status.post_id = p.ID AND pm_status.meta_key = '_status'
-			LEFT JOIN {$wpdb->postmeta} pm_method ON pm_method.post_id = p.ID AND pm_method.meta_key = '_payment_method'
-			LEFT JOIN {$wpdb->postmeta} pm_txn ON pm_txn.post_id = p.ID AND pm_txn.meta_key = '_txn_id'
-		";
-
-		$where = array( "p.post_type = '" . self::POST_TYPE . "'", "p.post_status = 'publish'" );
-
-		if ( $args['search'] ) {
-			$like    = '%' . $wpdb->esc_like( $args['search'] ) . '%';
-			$where[] = $wpdb->prepare(
-				'(p.post_title LIKE %s OR pm_sid.meta_value LIKE %s OR pm_sname.meta_value LIKE %s OR pm_course.meta_value LIKE %s)',
-				$like,
-				$like,
-				$like,
-				$like
-			);
-		}
-
-		if ( $args['status'] ) {
-			$where[] = $wpdb->prepare( 'pm_status.meta_value = %s', $args['status'] );
-		}
-
-		$range_clause = self::date_range_clause( $args['range'] );
-		if ( $range_clause ) {
-			$where[] = $range_clause;
-		}
-
-		$where_sql = implode( ' AND ', $where );
+		list( $join, $where_sql ) = self::filter_sql( $args );
 
 		$orderby_map = array(
 			'date'   => 'p.post_date',
@@ -215,8 +271,101 @@ class OIS_CC_Orders {
 		);
 	}
 
-	public static function date_range_clause( $range ) {
+	/**
+	 * JOINs + WHERE shared by the table, CSV export and stat cards, so all
+	 * three always agree on what the current filters match.
+	 */
+	private static function filter_sql( $args ) {
 		global $wpdb;
+
+		$join = "
+			LEFT JOIN {$wpdb->postmeta} pm_sid ON pm_sid.post_id = p.ID AND pm_sid.meta_key = '_student_id'
+			LEFT JOIN {$wpdb->postmeta} pm_sname ON pm_sname.post_id = p.ID AND pm_sname.meta_key = '_student_name'
+			LEFT JOIN {$wpdb->postmeta} pm_course ON pm_course.post_id = p.ID AND pm_course.meta_key = '_course_title'
+			LEFT JOIN {$wpdb->postmeta} pm_amount ON pm_amount.post_id = p.ID AND pm_amount.meta_key = '_amount'
+			LEFT JOIN {$wpdb->postmeta} pm_status ON pm_status.post_id = p.ID AND pm_status.meta_key = '_status'
+			LEFT JOIN {$wpdb->postmeta} pm_method ON pm_method.post_id = p.ID AND pm_method.meta_key = '_payment_method'
+			LEFT JOIN {$wpdb->postmeta} pm_txn ON pm_txn.post_id = p.ID AND pm_txn.meta_key = '_txn_id'
+		";
+
+		$where = array( "p.post_type = '" . self::POST_TYPE . "'", "p.post_status = 'publish'" );
+
+		if ( ! empty( $args['search'] ) ) {
+			$like    = '%' . $wpdb->esc_like( $args['search'] ) . '%';
+			$where[] = $wpdb->prepare(
+				'(p.post_title LIKE %s OR pm_sid.meta_value LIKE %s OR pm_sname.meta_value LIKE %s OR pm_course.meta_value LIKE %s)',
+				$like,
+				$like,
+				$like,
+				$like
+			);
+		}
+
+		if ( ! empty( $args['status'] ) ) {
+			$where[] = self::status_where( $args['status'] );
+		}
+
+		// Filters on the title stored on the order (not the course ID) so
+		// orders for since-deleted/renamed courses still match what's shown.
+		if ( ! empty( $args['course'] ) ) {
+			$where[] = $wpdb->prepare( 'pm_course.meta_value = %s', $args['course'] );
+		}
+
+		$range_clause = self::date_range_clause(
+			isset( $args['range'] ) ? $args['range'] : 'all',
+			isset( $args['from'] ) ? $args['from'] : '',
+			isset( $args['to'] ) ? $args['to'] : ''
+		);
+		if ( $range_clause ) {
+			$where[] = $range_clause;
+		}
+
+		return array( $join, implode( ' AND ', $where ) );
+	}
+
+	/** SQL condition for an admin status key (success / failed / canceled). */
+	private static function status_where( $key ) {
+		switch ( $key ) {
+			case 'success':
+				return "pm_status.meta_value = 'paid'";
+			case 'failed':
+				return "pm_status.meta_value = 'failed'";
+			default:
+				return "( pm_status.meta_value IS NULL OR pm_status.meta_value NOT IN ('paid','failed') )";
+		}
+	}
+
+	/**
+	 * Course filter options: only courses that currently exist (published),
+	 * in the Courses menu order. Orders for since-deleted courses are still
+	 * reachable through the search box.
+	 */
+	public static function get_course_titles() {
+		return array_map(
+			function ( $c ) {
+				return $c['title'];
+			},
+			array_values( array_filter( OIS_CC_Courses::get_all_courses() ) )
+		);
+	}
+
+	public static function date_range_clause( $range, $from = '', $to = '' ) {
+		global $wpdb;
+
+		// A custom from/to (either end optional) wins over the preset range.
+		$from = self::valid_date( $from );
+		$to   = self::valid_date( $to );
+		if ( $from || $to ) {
+			$clauses = array();
+			if ( $from ) {
+				$clauses[] = $wpdb->prepare( 'p.post_date >= %s', $from . ' 00:00:00' );
+			}
+			if ( $to ) {
+				$clauses[] = $wpdb->prepare( 'p.post_date <= %s', $to . ' 23:59:59' );
+			}
+			return implode( ' AND ', $clauses );
+		}
+
 		$now = current_time( 'timestamp' ); // phpcs:ignore
 
 		switch ( $range ) {
@@ -236,32 +385,34 @@ class OIS_CC_Orders {
 		return $wpdb->prepare( 'p.post_date >= %s', gmdate( 'Y-m-d H:i:s', $start ) );
 	}
 
+	/** Returns $date if it's a real Y-m-d date, else ''. */
+	public static function valid_date( $date ) {
+		$d = DateTime::createFromFormat( '!Y-m-d', (string) $date );
+		return $d && $d->format( 'Y-m-d' ) === $date ? $date : '';
+	}
+
 	/**
-	 * KPI numbers for the stat cards at the top of the Transactions page.
+	 * KPI numbers for the stat cards at the top of the Transactions page,
+	 * for the same filters as the table (status excluded — the cards break
+	 * results down by status themselves).
 	 */
-	public static function get_stats( $range = 'all' ) {
+	public static function get_stats( $args = array() ) {
 		global $wpdb;
 
-		$join       = "
-			LEFT JOIN {$wpdb->postmeta} pm_amount ON pm_amount.post_id = p.ID AND pm_amount.meta_key = '_amount'
-			LEFT JOIN {$wpdb->postmeta} pm_status ON pm_status.post_id = p.ID AND pm_status.meta_key = '_status'
-		";
-		$where      = array( "p.post_type = '" . self::POST_TYPE . "'", "p.post_status = 'publish'" );
-		$range_clause = self::date_range_clause( $range );
-		if ( $range_clause ) {
-			$where[] = $range_clause;
-		}
-		$where_sql = implode( ' AND ', $where );
+		$args['status'] = '';
+		list( $join, $where_sql ) = self::filter_sql( $args );
 
 		$total_orders = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} p $join WHERE $where_sql" ); // phpcs:ignore
-		$paid_orders  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} p $join WHERE $where_sql AND pm_status.meta_value = 'paid'" ); // phpcs:ignore
-		$pending      = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} p $join WHERE $where_sql AND pm_status.meta_value = 'pending'" ); // phpcs:ignore
+		$paid_orders  = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} p $join WHERE $where_sql AND " . self::status_where( 'success' ) ); // phpcs:ignore
+		$failed       = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} p $join WHERE $where_sql AND " . self::status_where( 'failed' ) ); // phpcs:ignore
+		$canceled     = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$wpdb->posts} p $join WHERE $where_sql AND " . self::status_where( 'canceled' ) ); // phpcs:ignore
 		$revenue      = (float) $wpdb->get_var( "SELECT SUM(CAST(pm_amount.meta_value AS DECIMAL(10,2))) FROM {$wpdb->posts} p $join WHERE $where_sql AND pm_status.meta_value = 'paid'" ); // phpcs:ignore
 
 		return array(
 			'total_orders' => $total_orders,
 			'paid_orders'  => $paid_orders,
-			'pending'      => $pending,
+			'failed'       => $failed,
+			'canceled'     => $canceled,
 			'revenue'      => $revenue,
 		);
 	}
@@ -277,6 +428,8 @@ class OIS_CC_Orders {
 			'student_id'     => get_post_meta( $order_id, '_student_id', true ),
 			'student_name'   => get_post_meta( $order_id, '_student_name', true ),
 			'student_class'  => get_post_meta( $order_id, '_student_class', true ),
+			'student_section'=> get_post_meta( $order_id, '_student_section', true ),
+			'student_roll'   => get_post_meta( $order_id, '_student_roll', true ),
 			'course_title'   => get_post_meta( $order_id, '_course_title', true ),
 			'amount'         => (float) get_post_meta( $order_id, '_amount', true ),
 			'status'         => get_post_meta( $order_id, '_status', true ),

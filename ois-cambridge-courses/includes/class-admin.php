@@ -21,6 +21,30 @@ class OIS_CC_Admin {
 		add_action( 'admin_post_ois_cc_add_user', array( $this, 'handle_add_user' ) );
 		add_action( 'admin_post_ois_cc_remove_user', array( $this, 'handle_remove_user' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
+		add_action( 'admin_notices', array( $this, 'test_mode_notice' ) );
+	}
+
+	/**
+	 * Test Mode shows OTPs on screen and enables the free dummy gateway, so it
+	 * must never be left on unnoticed on the live site.
+	 */
+	public function test_mode_notice() {
+		if ( ! get_option( 'ois_cc_test_mode' ) || ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		printf(
+			'<div class="notice notice-warning"><p><strong>Cambridge Courses Test Mode is ON.</strong> OTP codes are shown on screen (built-in OTP only) and, without a Moneybag key, orders are auto-approved for free. <a href="%s">Turn it off in Settings</a> when you finish testing.</p></div>',
+			esc_url( admin_url( 'admin.php?page=ois-cc-settings' ) )
+		);
+	}
+
+	/**
+	 * Spreadsheet apps execute cells starting with = + - @ as formulas; FEMS
+	 * names and course titles flow into the export, so neutralise them.
+	 */
+	private static function csv_cell( $value ) {
+		$value = (string) $value;
+		return preg_match( '/^[=+\-@\t\r]/', $value ) ? "'" . $value : $value;
 	}
 
 	/**
@@ -114,8 +138,7 @@ class OIS_CC_Admin {
 			wp_die( 'You do not have access to this page.' );
 		}
 
-		$range = isset( $_REQUEST['range'] ) ? sanitize_key( $_REQUEST['range'] ) : 'all';
-		$stats = OIS_CC_Orders::get_stats( $range );
+		$stats = OIS_CC_Orders::get_stats( OIS_CC_Transactions_Table::current_filters() );
 
 		$table = new OIS_CC_Transactions_Table();
 		$table->prepare_items();
@@ -129,12 +152,16 @@ class OIS_CC_Admin {
 					<span class="ois-cc-stat-value"><?php echo esc_html( number_format_i18n( $stats['total_orders'] ) ); ?></span>
 				</div>
 				<div class="ois-cc-stat-card ois-cc-stat-green">
-					<span class="ois-cc-stat-label">Paid</span>
+					<span class="ois-cc-stat-label">Success</span>
 					<span class="ois-cc-stat-value"><?php echo esc_html( number_format_i18n( $stats['paid_orders'] ) ); ?></span>
 				</div>
-				<div class="ois-cc-stat-card ois-cc-stat-amber">
-					<span class="ois-cc-stat-label">Pending</span>
-					<span class="ois-cc-stat-value"><?php echo esc_html( number_format_i18n( $stats['pending'] ) ); ?></span>
+				<div class="ois-cc-stat-card ois-cc-stat-red">
+					<span class="ois-cc-stat-label">Failed</span>
+					<span class="ois-cc-stat-value"><?php echo esc_html( number_format_i18n( $stats['failed'] ) ); ?></span>
+				</div>
+				<div class="ois-cc-stat-card ois-cc-stat-slate">
+					<span class="ois-cc-stat-label">Canceled</span>
+					<span class="ois-cc-stat-value"><?php echo esc_html( number_format_i18n( $stats['canceled'] ) ); ?></span>
 				</div>
 				<div class="ois-cc-stat-card ois-cc-stat-purple">
 					<span class="ois-cc-stat-label">Revenue</span>
@@ -142,7 +169,7 @@ class OIS_CC_Admin {
 				</div>
 			</div>
 
-			<form method="get" class="ois-cc-table-card">
+			<form method="get" class="ois-cc-table-card" id="ois-cc-filters">
 				<input type="hidden" name="page" value="ois-cc-transactions">
 				<?php
 				$table->search_box( 'Search student, order # or course', 'ois-cc-search' );
@@ -150,6 +177,24 @@ class OIS_CC_Admin {
 				?>
 			</form>
 		</div>
+		<script>
+		// Apply a filter the moment it changes — no Filter button needed.
+		// Paging resets so a narrower filter never lands on an empty page.
+		( function () {
+			var form = document.getElementById( 'ois-cc-filters' );
+			if ( ! form ) { return; }
+			form.querySelectorAll( '.tablenav.top select[name="course"], .tablenav.top select[name="range"], .tablenav.top select[name="status"], .tablenav.top input[type="date"]' ).forEach( function ( el ) {
+				el.addEventListener( 'change', function () {
+					var paged = form.querySelector( 'input[name="paged"]' );
+					if ( paged ) { paged.value = 1; }
+					if ( 'range' === el.name ) { // a preset replaces any custom dates
+						form.querySelectorAll( 'input[type="date"]' ).forEach( function ( d ) { d.value = ''; } );
+					}
+					form.submit();
+				} );
+			} );
+		} )();
+		</script>
 		<?php
 	}
 
@@ -160,14 +205,7 @@ class OIS_CC_Admin {
 			wp_die( 'You do not have access to this export.' );
 		}
 
-		$result = OIS_CC_Orders::query(
-			array(
-				'search'   => isset( $_GET['search'] ) ? sanitize_text_field( wp_unslash( $_GET['search'] ) ) : '',
-				'range'    => isset( $_GET['range'] ) ? sanitize_key( $_GET['range'] ) : 'all',
-				'status'   => isset( $_GET['status'] ) ? sanitize_key( $_GET['status'] ) : '',
-				'per_page' => 0,
-			)
-		);
+		$result = OIS_CC_Orders::query( array_merge( OIS_CC_Transactions_Table::current_filters(), array( 'per_page' => 0 ) ) );
 
 		nocache_headers();
 		header( 'Content-Type: text/csv; charset=utf-8' );
@@ -179,16 +217,19 @@ class OIS_CC_Admin {
 		foreach ( $result['rows'] as $row ) {
 			fputcsv(
 				$out,
-				array(
-					$row['order_number'],
-					$row['student_name'],
-					$row['student_id'],
-					$row['course_title'],
-					$row['amount'],
-					$row['status'],
-					$row['payment_method'],
-					$row['txn_id'],
-					$row['post_date'],
+				array_map(
+					array( __CLASS__, 'csv_cell' ),
+					array(
+						$row['order_number'],
+						$row['student_name'],
+						$row['student_id'],
+						$row['course_title'],
+						$row['amount'],
+						OIS_CC_Orders::status_label( $row['status'] ),
+						$row['payment_method'],
+						$row['txn_id'],
+						$row['post_date'],
+					)
 				)
 			);
 		}
@@ -207,6 +248,33 @@ class OIS_CC_Admin {
 		register_setting( 'ois_cc_settings', 'ois_cc_sms_api_url', array( 'sanitize_callback' => 'esc_url_raw' ) );
 		register_setting( 'ois_cc_settings', 'ois_cc_sms_api_key', array( 'sanitize_callback' => 'sanitize_text_field' ) );
 		register_setting( 'ois_cc_settings', 'ois_cc_test_mode', array( 'sanitize_callback' => 'absint' ) );
+		register_setting(
+			'ois_cc_settings',
+			'ois_cc_otp_channel',
+			array(
+				'default'           => 'mobile',
+				'sanitize_callback' => function ( $v ) {
+					return in_array( $v, array( 'email', 'mobile', 'gateway' ), true ) ? $v : 'mobile';
+				},
+			)
+		);
+		register_setting( 'ois_cc_settings', 'ois_cc_moneybag_api_key', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+		register_setting( 'ois_cc_settings', 'ois_cc_moneybag_base_url', array( 'sanitize_callback' => 'esc_url_raw' ) );
+		register_setting( 'ois_cc_settings', 'ois_cc_moneybag_webhook_secret', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+		register_setting( 'ois_cc_settings', 'ois_cc_recaptcha_site_key', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+		register_setting( 'ois_cc_settings', 'ois_cc_recaptcha_secret', array( 'sanitize_callback' => 'sanitize_text_field' ) );
+		register_setting(
+			'ois_cc_settings',
+			'ois_cc_recaptcha_threshold',
+			array(
+				'default'           => 0.5,
+				'sanitize_callback' => function ( $v ) {
+					return is_numeric( $v ) ? max( 0, min( 1, (float) $v ) ) : 0.5;
+				},
+			)
+		);
+		register_setting( 'ois_cc_settings', 'ois_cc_side_image', array( 'sanitize_callback' => 'esc_url_raw' ) );
+		register_setting( 'ois_cc_settings', 'ois_cc_support_email', array( 'sanitize_callback' => 'sanitize_email', 'default' => 'info@ois.edu.bd' ) );
 		register_setting( 'ois_cc_settings', 'ois_cc_access_roles', array( 'sanitize_callback' => array( $this, 'sanitize_role_list' ) ) );
 		// ois_cc_access_users is intentionally NOT part of this settings group — it's
 		// managed by its own add/remove actions below (one user at a time, with an
@@ -266,11 +334,26 @@ class OIS_CC_Admin {
 				<h2>Student Records API (FEMS)</h2>
 				<p class="description">Leave the URL blank to keep using dummy student data for testing — any Student ID will resolve to a test student.</p>
 				<table class="form-table">
-					<tr><th><label for="ois_cc_fems_api_url">API URL</label></th><td><input type="url" class="regular-text" id="ois_cc_fems_api_url" name="ois_cc_fems_api_url" value="<?php echo esc_attr( get_option( 'ois_cc_fems_api_url' ) ); ?>" placeholder="https://fems.ois.edu.bd/api/students"></td></tr>
+					<tr><th><label for="ois_cc_fems_api_url">API URL</label></th><td><input type="url" class="regular-text" id="ois_cc_fems_api_url" name="ois_cc_fems_api_url" value="<?php echo esc_attr( get_option( 'ois_cc_fems_api_url' ) ); ?>" placeholder="https://api.fems.education/api/v2/external/student/lookup"><p class="description">Sent as <code>X-Api-Key</code>, with <code>student_id</code> appended as a query arg.</p></td></tr>
 					<tr><th><label for="ois_cc_fems_api_key">API Key</label></th><td><input type="text" class="regular-text" id="ois_cc_fems_api_key" name="ois_cc_fems_api_key" value="<?php echo esc_attr( get_option( 'ois_cc_fems_api_key' ) ); ?>"></td></tr>
 				</table>
 
-				<h2>SMS Gateway (OTP)</h2>
+				<h2>OTP Delivery</h2>
+				<table class="form-table">
+					<tr>
+						<th><label for="ois_cc_otp_channel">Send OTP via</label></th>
+						<td>
+							<select id="ois_cc_otp_channel" name="ois_cc_otp_channel">
+								<?php foreach ( array( 'mobile' => 'FEMS — SMS to student mobile', 'email' => 'FEMS — student email', 'gateway' => 'Built-in code + SMS gateway below' ) as $key => $label ) : ?>
+									<option value="<?php echo esc_attr( $key ); ?>" <?php selected( get_option( 'ois_cc_otp_channel', 'mobile' ), $key ); ?>><?php echo esc_html( $label ); ?></option>
+								<?php endforeach; ?>
+							</select>
+							<p class="description">FEMS options use FEMS's own OTP service (<code>/auth/forgot/otp-send</code> + <code>/verify-otp</code>) and only apply once the FEMS API URL above is set; until then the built-in code is used.</p>
+						</td>
+					</tr>
+				</table>
+
+				<h2>SMS Gateway (built-in OTP)</h2>
 				<p class="description">Leave the URL blank to keep OTPs in dummy mode — they'll be logged instead of texted.</p>
 				<table class="form-table">
 					<tr><th><label for="ois_cc_sms_api_url">Gateway URL</label></th><td><input type="url" class="regular-text" id="ois_cc_sms_api_url" name="ois_cc_sms_api_url" value="<?php echo esc_attr( get_option( 'ois_cc_sms_api_url' ) ); ?>" placeholder="https://sms-gateway.example.com/send"></td></tr>
@@ -278,13 +361,33 @@ class OIS_CC_Admin {
 					<tr>
 						<th>Test Mode</th>
 						<td>
-							<label><input type="checkbox" name="ois_cc_test_mode" value="1" <?php checked( get_option( 'ois_cc_test_mode' ), 1 ); ?>> Show the generated OTP on screen (for testing without a live SMS gateway)</label>
+							<label><input type="checkbox" name="ois_cc_test_mode" value="1" <?php checked( get_option( 'ois_cc_test_mode' ), 1 ); ?>> Show the generated OTP on screen (built-in OTP only) and allow the free dummy payment when no Moneybag key is set. <strong>Turn off on the live site.</strong></label>
 						</td>
 					</tr>
 				</table>
 
-				<h2>Payment Gateway</h2>
-				<p class="description">No gateway credentials yet — payments run through a dummy processor that auto-approves every order. Hook <code>ois_cc_process_payment</code> once the school's real gateway is ready; no settings needed here until then.</p>
+				<h2>Payment Gateway (Moneybag)</h2>
+				<p class="description">Leave the Merchant API Key blank to keep using the dummy processor (auto-approves every order, no real charge). Once set, <strong>Buy Now</strong> redirects straight to Moneybag's hosted checkout page instead of showing a payment page on this site.</p>
+				<table class="form-table">
+					<tr><th><label for="ois_cc_moneybag_api_key">Merchant API Key</label></th><td><input type="text" class="regular-text" id="ois_cc_moneybag_api_key" name="ois_cc_moneybag_api_key" value="<?php echo esc_attr( get_option( 'ois_cc_moneybag_api_key' ) ); ?>"></td></tr>
+					<tr><th><label for="ois_cc_moneybag_base_url">API Base URL</label></th><td><input type="url" class="regular-text" id="ois_cc_moneybag_base_url" name="ois_cc_moneybag_base_url" value="<?php echo esc_attr( get_option( 'ois_cc_moneybag_base_url' ) ); ?>" placeholder="https://sandbox.api.moneybag.com.bd/api/v2"><p class="description">Sandbox by default. For production, use <code>https://api.moneybag.com.bd/api/v2</code> together with the production API key and webhook secret.</p></td></tr>
+					<tr><th><label for="ois_cc_moneybag_webhook_secret">Webhook Signing Secret</label></th><td><input type="text" class="regular-text" id="ois_cc_moneybag_webhook_secret" name="ois_cc_moneybag_webhook_secret" value="<?php echo esc_attr( get_option( 'ois_cc_moneybag_webhook_secret' ) ); ?>"><p class="description">From the Moneybag dashboard's webhook settings. Paste this IPN URL there: <code><?php echo esc_html( rest_url( 'ois-cc/v1/moneybag-ipn' ) ); ?></code></p></td></tr>
+				</table>
+				<p class="description">Real charges run through Moneybag once a key is set here — test in their sandbox before switching to a production key. Hook <code>ois_cc_process_payment</code> still works as a fallback override on the dummy path.</p>
+
+				<h2>Google reCAPTCHA</h2>
+				<p class="description">Invisible spam protection on the Student ID step and OTP resends — no checkbox for students. Create a <strong>reCAPTCHA v3</strong> key at <a href="https://www.google.com/recaptcha/admin/create" target="_blank" rel="noopener">google.com/recaptcha/admin</a> for this domain. Leave either field blank to switch it off.</p>
+				<table class="form-table">
+					<tr><th><label for="ois_cc_recaptcha_site_key">Site Key</label></th><td><input type="text" class="regular-text" id="ois_cc_recaptcha_site_key" name="ois_cc_recaptcha_site_key" value="<?php echo esc_attr( get_option( 'ois_cc_recaptcha_site_key' ) ); ?>"></td></tr>
+					<tr><th><label for="ois_cc_recaptcha_secret">Secret Key</label></th><td><input type="text" class="regular-text" id="ois_cc_recaptcha_secret" name="ois_cc_recaptcha_secret" value="<?php echo esc_attr( get_option( 'ois_cc_recaptcha_secret' ) ); ?>"></td></tr>
+					<tr><th><label for="ois_cc_recaptcha_threshold">Score Threshold</label></th><td><input type="number" class="small-text" min="0" max="1" step="0.1" id="ois_cc_recaptcha_threshold" name="ois_cc_recaptcha_threshold" value="<?php echo esc_attr( get_option( 'ois_cc_recaptcha_threshold', 0.5 ) ); ?>"><p class="description">0 (bot) to 1 (human). Requests scoring below this are blocked. Default 0.5; lower it if real students get blocked.</p></td></tr>
+				</table>
+
+				<h2>Appearance</h2>
+				<table class="form-table">
+					<tr><th><label for="ois_cc_support_email">Support Email</label></th><td><input type="email" class="regular-text" id="ois_cc_support_email" name="ois_cc_support_email" value="<?php echo esc_attr( get_option( 'ois_cc_support_email', 'info@ois.edu.bd' ) ); ?>"><p class="description">Shown to students with every error message and on the success page.</p></td></tr>
+					<tr><th><label for="ois_cc_side_image">Side Image URL</label></th><td><input type="url" class="regular-text" id="ois_cc_side_image" name="ois_cc_side_image" value="<?php echo esc_attr( get_option( 'ois_cc_side_image' ) ); ?>" placeholder="<?php echo esc_attr( OIS_CC_URL . 'assets/img/cambridge-english.webp' ); ?>"><p class="description">Photo shown beside the form. Leave blank for the bundled Cambridge English photo, or paste a Media Library URL (landscape, at least 1200px wide).</p></td></tr>
+				</table>
 
 				<h2>Access Control</h2>
 				<p class="description">Administrators always have access. Grant the Transactions dashboard to specific roles and/or individual users below.</p>

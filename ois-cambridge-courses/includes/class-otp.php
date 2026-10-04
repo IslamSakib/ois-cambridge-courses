@@ -27,18 +27,23 @@ class OIS_CC_OTP {
 	 * Generate + store a fresh OTP for this student ID. Returns the plain
 	 * OTP (caller is responsible for sending it) or WP_Error if the resend
 	 * cooldown hasn't elapsed yet.
+	 *
+	 * $remote = true means FEMS generates and checks the code; this then only
+	 * records that one was requested, so the cooldown and attempt cap still
+	 * apply locally. Returns true instead of an OTP in that case.
 	 */
-	public static function generate( $student_id ) {
+	public static function generate( $student_id, $remote = false ) {
 		if ( get_transient( self::throttle_key( $student_id ) ) ) {
 			return new WP_Error( 'too_soon', 'Please wait before requesting another OTP.' );
 		}
 
-		$otp = str_pad( (string) wp_rand( 0, 999999 ), 6, '0', STR_PAD_LEFT );
+		$otp = $remote ? true : str_pad( (string) wp_rand( 0, 999999 ), 6, '0', STR_PAD_LEFT );
 
 		set_transient(
 			self::otp_key( $student_id ),
 			array(
-				'hash'     => wp_hash_password( $otp ),
+				'hash'     => $remote ? '' : wp_hash_password( $otp ),
+				'remote'   => $remote,
 				'attempts' => 0,
 			),
 			self::TTL
@@ -63,7 +68,15 @@ class OIS_CC_OTP {
 			return new WP_Error( 'locked', 'Too many incorrect attempts. Please request a new OTP.' );
 		}
 
-		if ( ! wp_check_password( $submitted, $data['hash'] ) ) {
+		$valid = empty( $data['remote'] )
+			? wp_check_password( $submitted, $data['hash'] )
+			: OIS_CC_FEMS_API::verify_fems_otp( $student_id, $submitted );
+
+		if ( is_wp_error( $valid ) ) {
+			return $valid; // FEMS unreachable — not the student's fault, don't count it.
+		}
+
+		if ( ! $valid ) {
 			$data['attempts']++;
 			set_transient( self::otp_key( $student_id ), $data, self::TTL );
 			return new WP_Error( 'incorrect', 'Incorrect OTP. Please try again.' );
