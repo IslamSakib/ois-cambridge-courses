@@ -57,7 +57,7 @@
 
 	var FRIENDLY = {
 		network: 'We couldn\'t reach our server. Please check your internet connection and try again.',
-		not_found: 'We couldn\'t find that Student ID. Please check the number on your school ID card and try again.',
+		not_found: 'Student ID not found. Please check your Student ID and try again.',
 		invalid_id: 'Please enter your Student ID.',
 		too_soon: 'We\'ve just sent you a code. Please wait a minute before asking for another one.',
 		rate_limited: 'Too many attempts from this device. For your security, please wait 15 minutes and try again.',
@@ -65,7 +65,7 @@
 		fems_unavailable: 'Our student records system is not responding right now. Please try again in a few minutes.',
 		expired: 'This code has expired. Tap “Resend code” to get a new one.',
 		locked: 'Too many incorrect codes. Tap “Resend code” to get a new one.',
-		incorrect: 'That code doesn\'t match. Please check the SMS and try again.',
+		incorrect: 'Incorrect verification code. Please try again.',
 		session_expired: 'For your security, your session has timed out. Please enter your Student ID again.',
 		course_not_found: 'This course is no longer available. Please choose another one.',
 		order_failed: 'We couldn\'t start your order. Please try again.',
