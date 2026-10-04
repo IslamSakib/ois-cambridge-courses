@@ -405,3 +405,7 @@
 	.ois-cc-app *, .ois-cc-app *::before, .ois-cc-app *::after { animation-duration: .001ms !important; animation-delay: 0s !important; transition-duration: .001ms !important; }
 	.ois-cc-spinner { animation: ois-cc-spin 2.4s linear infinite !important; }
 }
+
+/* reCAPTCHA v3 badge: Google pins it bottom-right inline; move it to the left edge, logo only until hovered. */
+.grecaptcha-badge { left: 0 !important; right: auto !important; width: 70px !important; transition: width .3s ease !important; }
+.grecaptcha-badge:hover { width: 256px !important; }
