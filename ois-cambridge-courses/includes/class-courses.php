@@ -4,10 +4,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
- * "ois_course" custom post type. Featured image = course thumbnail,
- * post_content = long description shown on the course detail step,
- * post_excerpt = short blurb for the grid card. Everything else (price,
- * category tag, instructor, duration) lives in a meta box.
+ * "ois_course" custom post type. post_content = the description shown in
+ * the opened course card. Everything else (price, category tag, level,
+ * age group, duration) lives in a meta box.
  */
 class OIS_CC_Courses {
 
@@ -38,7 +37,7 @@ class OIS_CC_Courses {
 				// adds the "Courses" submenu item explicitly instead, so there's exactly one
 				// registration path and no race with WordPress's own submenu auto-insertion.
 				'show_in_menu' => false,
-				'supports'     => array( 'title', 'editor', 'excerpt', 'thumbnail', 'page-attributes' ),
+				'supports'     => array( 'title', 'editor', 'thumbnail', 'page-attributes' ),
 				'has_archive'  => false,
 			)
 		);
@@ -52,8 +51,9 @@ class OIS_CC_Courses {
 		wp_nonce_field( 'ois_cc_course_meta', 'ois_cc_course_meta_nonce' );
 		$fields = array(
 			'category'   => 'Category tag (e.g. Cambridge IGCSE)',
-			'instructor' => 'Instructor name',
-			'duration'   => 'Duration (e.g. 6 months)',
+			'level'      => 'Level (e.g. Beginner (Pre-A1))',
+			'age_group'  => 'Age group (e.g. 6-8 years)',
+			'duration'   => 'Duration (e.g. 8 weeks (2 months))',
 			'price'      => 'Price (BDT)',
 			'list_price' => 'Original / list price (BDT, optional — shown struck through)',
 		);
@@ -77,7 +77,7 @@ class OIS_CC_Courses {
 		if ( ! current_user_can( 'edit_post', $post_id ) ) {
 			return;
 		}
-		foreach ( array( 'category', 'instructor', 'duration', 'price', 'list_price' ) as $key ) {
+		foreach ( array( 'category', 'level', 'age_group', 'duration', 'price', 'list_price' ) as $key ) {
 			if ( isset( $_POST[ 'ois_cc_' . $key ] ) ) {
 				update_post_meta( $post_id, '_ois_cc_' . $key, sanitize_text_field( wp_unslash( $_POST[ 'ois_cc_' . $key ] ) ) );
 			}
@@ -112,11 +112,12 @@ class OIS_CC_Courses {
 			// direct echo; decode it since the frontend JS treats this as plain text and
 			// re-escapes it itself before inserting into the DOM.
 			'title'      => wp_specialchars_decode( get_the_title( $post ), ENT_QUOTES ),
-			'excerpt'    => wp_specialchars_decode( has_excerpt( $post ) ? get_the_excerpt( $post ) : wp_trim_words( $post->post_content, 20 ), ENT_QUOTES ),
-			'description'=> apply_filters( 'the_content', $post->post_content ),
+			// Plain text (line breaks kept) — the frontend escapes it and renders it pre-line.
+			'description'=> trim( wp_specialchars_decode( wp_strip_all_tags( $post->post_content ), ENT_QUOTES ) ),
 			'image'      => get_the_post_thumbnail_url( $post, 'medium_large' ),
 			'category'   => get_post_meta( $post->ID, '_ois_cc_category', true ),
-			'instructor' => get_post_meta( $post->ID, '_ois_cc_instructor', true ),
+			'level'      => get_post_meta( $post->ID, '_ois_cc_level', true ),
+			'age_group'  => get_post_meta( $post->ID, '_ois_cc_age_group', true ),
 			'duration'   => get_post_meta( $post->ID, '_ois_cc_duration', true ),
 			'price'      => (float) get_post_meta( $post->ID, '_ois_cc_price', true ),
 			'list_price' => (float) get_post_meta( $post->ID, '_ois_cc_list_price', true ),
@@ -162,14 +163,12 @@ class OIS_CC_Courses {
 				array(
 					'post_type'    => self::POST_TYPE,
 					'post_title'   => $title,
-					'post_excerpt' => 'Cambridge English course offered by Oxford International School.',
 					'post_content' => 'Cambridge English: ' . $title . ' — a course offered by Oxford International School.',
 					'post_status'  => 'publish',
 				)
 			);
 			if ( $post_id && ! is_wp_error( $post_id ) ) {
 				update_post_meta( $post_id, '_ois_cc_category', $category );
-				update_post_meta( $post_id, '_ois_cc_instructor', 'OIS Faculty' );
 				update_post_meta( $post_id, '_ois_cc_price', $price );
 			}
 		}

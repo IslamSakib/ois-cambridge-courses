@@ -6,14 +6,14 @@ WordPress plugin for Oxford International School: a Student-ID + OTP verified pu
 
 1. **Student ID** — visitor enters their Student ID.
 2. **Verify** — a 6-digit OTP is sent to the student's registered mobile (via the school's FEMS records) and verified on-screen (mobile shown masked).
-3. **Choose & pay** — student details panel + an accordion of the Cambridge English levels. Opening a level shows its blurb (the course **Excerpt**; line breaks are kept, so Level / Age Group / Duration can each sit on their own line), price and **Pay now**, which creates the order and redirects straight to Moneybag's hosted checkout (no in-house checkout or payment-method page). Falls back to a dummy auto-approve gateway until a Moneybag key is set.
+3. **Choose & pay** — student details panel + an accordion of the Cambridge English levels. Opening a level shows its Level / Age Group / Duration (Course Details fields), its description (the course editor text), price and **Pay now**, which creates the order and redirects straight to Moneybag's hosted checkout (no in-house checkout or payment-method page). Falls back to a dummy auto-approve gateway until a Moneybag key is set.
 4. **Payment successful** — order confirmation with transaction ID and amount paid, reached either straight from the dummy gateway or after Moneybag redirects back and the order is confirmed paid (via its webhook and/or the verify API). **Download invoice** opens a printable A4 invoice with the amount in words and a PAID stamp.
 
 ## Admin
 
 Sidebar menu **Cambridge Courses**:
 - **Transactions** — colorful KPI cards + a searchable, sortable, paginated table of every order, with This Week / This Month / This Year filters and CSV export.
-- **Courses** — manage the courses/exams (price, discount price, category, instructor, duration, image, description). Image and duration are optional and not shown on the storefront.
+- **Courses** — manage the courses/exams (price, discount price, category, level, age group, duration, description). Level, age group, duration and description are optional; whatever is filled in shows in the opened course card.
 - **Settings** — FEMS student-records API, SMS OTP gateway, Moneybag payment gateway, test mode, and **access control**: pick which WordPress roles and/or individual users (besides Administrators) can see the Transactions dashboard.
 
 ## Payment gateway (Moneybag)

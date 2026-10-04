@@ -350,9 +350,9 @@
 }
 .ois-cc-course-info { flex: 1 1 260px; min-width: 0; }
 .ois-cc-course-desc { font-size: 14px; color: var(--ois-muted); line-height: 1.5; white-space: pre-line; }
-.ois-cc-course-meta { display: flex; flex-wrap: wrap; gap: 6px 18px; margin-top: 6px; font-size: 13px; color: var(--ois-muted); }
-.ois-cc-course-meta span { display: inline-flex; align-items: center; gap: 6px; }
-.ois-cc-course-meta .ois-cc-ico { width: 16px; height: 16px; color: var(--ois-navy); }
+.ois-cc-course-meta { display: grid; gap: 2px; font-size: 14px; line-height: 1.5; color: var(--ois-muted); }
+.ois-cc-course-meta b { font-weight: 600; color: var(--ois-ink); }
+.ois-cc-course-meta + .ois-cc-course-desc { margin-top: 10px; }
 .ois-cc-product-buy { display: flex; align-items: center; gap: 16px; padding-left: 22px; border-left: 1px solid #efd3d0; }
 .ois-cc-price-row { display: flex; align-items: baseline; gap: 8px; font-variant-numeric: tabular-nums; }
 .ois-cc-price { font: 700 24px/1 "Poppins", sans-serif; color: var(--ois-ink); letter-spacing: -.02em; }

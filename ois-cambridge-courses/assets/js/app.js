@@ -342,14 +342,14 @@
 		);
 	}
 
-	// Accordion row: collapsed = tag + title + price; open = blurb, meta
+	// Accordion row: collapsed = tag + title + price; open = facts, description
 	// and the Pay button (the layout from the design reference).
 	function productCard( c, i ) {
 		var oldPrice = c.list_price > c.price ? '<s class="ois-cc-price-old">' + money( c.list_price ) + '</s>' : '';
 		var buying = state.busy && state.selectedCourse && state.selectedCourse.id === c.id;
 		var openId = null === state.openCourse && state.courses[ 0 ] ? state.courses[ 0 ].id : state.openCourse;
 		var open = openId === c.id;
-		var meta = [ [ 'section', c.instructor ], [ 'clock', c.duration ] ].filter( function ( m ) { return m[ 1 ]; } );
+		var meta = [ [ 'Level', c.level ], [ 'Age Group', c.age_group ], [ 'Duration', c.duration ] ].filter( function ( m ) { return m[ 1 ]; } );
 		return (
 			'<article class="ois-cc-course' + ( open ? ' is-open' : '' ) + '" style="--i:' + i + '">' +
 				'<button type="button" class="ois-cc-course-head" data-toggle-course="' + c.id + '" aria-expanded="' + open + '">' +
@@ -364,8 +364,8 @@
 				( open
 					? '<div class="ois-cc-course-body">' +
 						'<div class="ois-cc-course-info">' +
-							( c.excerpt ? '<p class="ois-cc-course-desc">' + esc( c.excerpt ) + '</p>' : '' ) +
-							( meta.length ? '<div class="ois-cc-course-meta">' + meta.map( function ( m ) { return '<span>' + icon( m[ 0 ] ) + esc( m[ 1 ] ) + '</span>'; } ).join( '' ) + '</div>' : '' ) +
+							( meta.length ? '<div class="ois-cc-course-meta">' + meta.map( function ( m ) { return '<span><b>' + m[ 0 ] + ':</b> ' + esc( m[ 1 ] ) + '</span>'; } ).join( '' ) + '</div>' : '' ) +
+							( c.description ? '<p class="ois-cc-course-desc">' + esc( c.description ) + '</p>' : '' ) +
 						'</div>' +
 						'<div class="ois-cc-product-buy">' +
 							'<div class="ois-cc-price-row">' + oldPrice + '<span class="ois-cc-price">' + money( c.price ) + '</span></div>' +
