@@ -194,6 +194,22 @@ class OIS_CC_Orders {
 			}
 			update_post_meta( $balance['order_id'], '_parent_order', $order['order_number'] );
 			$out['balance_order_id'] = $balance['order_id'];
+
+			// Text the payment link so customer care doesn't have to. ASCII "BDT"
+			// keeps it a plain (cheaper, universally readable) SMS.
+			$first      = strtok( trim( $order['student_name'] ), ' ' );
+			$out['sms'] = (bool) get_option( 'ois_cc_sms_api_url' ) && ! is_wp_error( // no gateway = nothing really sent
+				OIS_CC_FEMS_API::send_sms(
+					get_post_meta( $order_id, '_student_mobile', true ),
+					sprintf(
+						'Hi %s, you changed your course to %s at Oxford International School, so a balance of BDT %s is due. Please pay it securely here: %s',
+						$first,
+						$course['title'],
+						number_format_i18n( $diff ),
+						self::pay_link( $balance['order_id'] )
+					)
+				)
+			);
 		} elseif ( $diff < -0.009 ) {
 			$out['refund'] = -$diff;
 			update_post_meta( $order_id, '_amount', $course['price'] ); // revenue = what we keep

@@ -195,6 +195,13 @@ class OIS_CC_Admin {
 		?>
 		<div class="wrap ois-cc-wrap">
 			<h1 class="ois-cc-heading">Cambridge Courses — Transactions</h1>
+			<?php if ( isset( $_GET['ois_cc_sms'] ) ) : ?>
+				<?php if ( 'sent' === $_GET['ois_cc_sms'] ) : ?>
+					<div class="notice notice-success"><p>Course changed. The payment link was texted to the student.</p></div>
+				<?php else : ?>
+					<div class="notice notice-warning"><p>Course changed, but the SMS could not be sent. Copy the payment link from the new Balance row and send it yourself.</p></div>
+				<?php endif; ?>
+			<?php endif; ?>
 
 			<div class="ois-cc-stats">
 				<div class="ois-cc-stat-card ois-cc-stat-blue">
@@ -260,7 +267,11 @@ class OIS_CC_Admin {
 			wp_die( esc_html( $result->get_error_message() ), '', array( 'back_link' => true ) );
 		}
 
-		wp_safe_redirect( admin_url( 'admin.php?page=ois-cc-transactions' ) );
+		$args = array( 'page' => 'ois-cc-transactions' );
+		if ( isset( $result['sms'] ) ) {
+			$args['ois_cc_sms'] = $result['sms'] ? 'sent' : 'failed';
+		}
+		wp_safe_redirect( add_query_arg( $args, admin_url( 'admin.php' ) ) );
 		exit;
 	}
 

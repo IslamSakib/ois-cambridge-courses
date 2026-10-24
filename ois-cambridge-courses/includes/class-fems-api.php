@@ -108,10 +108,15 @@ class OIS_CC_FEMS_API {
 	 * blocked waiting for real SMS.
 	 */
 	public static function send_otp_sms( $mobile, $otp ) {
+		return self::send_sms( $mobile, sprintf( 'Your Oxford International School OTP is %s. It expires in 5 minutes.', $otp ) );
+	}
+
+	/** Any SMS through the gateway in Settings; logs instead when none is set. */
+	public static function send_sms( $mobile, $message ) {
 		$gateway_url = get_option( 'ois_cc_sms_api_url' );
 
 		if ( ! $gateway_url ) {
-			error_log( sprintf( '[OIS-CC dummy SMS] To %s: your Oxford International School OTP is %s', $mobile, $otp ) );
+			error_log( sprintf( '[OIS-CC dummy SMS] To %s: %s', $mobile, $message ) );
 			return true;
 		}
 
@@ -123,7 +128,7 @@ class OIS_CC_FEMS_API {
 				'body'    => wp_json_encode(
 					array(
 						'to'      => $mobile,
-						'message' => sprintf( 'Your Oxford International School OTP is %s. It expires in 5 minutes.', $otp ),
+						'message' => $message,
 					)
 				),
 			)
@@ -135,7 +140,7 @@ class OIS_CC_FEMS_API {
 
 		$code = wp_remote_retrieve_response_code( $response );
 		if ( $code < 200 || $code >= 300 ) {
-			return new WP_Error( 'sms_failed', 'Failed to send OTP SMS.' );
+			return new WP_Error( 'sms_failed', 'Failed to send SMS.' );
 		}
 
 		return true;

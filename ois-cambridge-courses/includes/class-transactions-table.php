@@ -25,7 +25,7 @@ class OIS_CC_Transactions_Table extends WP_List_Table {
 	}
 
 	public function get_columns() {
-		return array(
+		$columns = array(
 			'order_number' => 'Order #',
 			'student'      => 'Student',
 			'course_title' => 'Course',
@@ -34,6 +34,11 @@ class OIS_CC_Transactions_Table extends WP_List_Table {
 			'status'       => 'Status',
 			'post_date'    => 'Date',
 		);
+		// Adjustments are admin-only (the Accounts role can view, not alter).
+		if ( current_user_can( 'manage_options' ) ) {
+			$columns['actions'] = 'Action';
+		}
+		return $columns;
 	}
 
 	public function get_sortable_columns() {
@@ -110,23 +115,32 @@ class OIS_CC_Transactions_Table extends WP_List_Table {
 			$html .= '<br><strong style="color:#b32d2e">Refund due ৳' . esc_html( number_format_i18n( $refund, 2 ) ) . ' (cash)</strong>';
 		}
 
-		// Adjustments are admin-only (the Accounts role can view, not alter).
-		if ( ! current_user_can( 'manage_options' ) ) {
-			return $html;
-		}
-		if ( $parent && OIS_CC_Orders::is_open( $item['status'] ) ) {
-			$html .= '<br><input type="text" readonly class="ois-cc-paylink" style="width:100%;max-width:260px" value="' . esc_attr( OIS_CC_Orders::pay_link( $id ) ) . '" onclick="this.select()"><span class="ois-cc-muted">Payment link — send to student</span>';
-		} elseif ( 'paid' === $item['status'] && ! $parent && ! $from ) {
-			$html .= '<details><summary style="cursor:pointer;color:#2271b1">Change course</summary><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">'
-				. '<input type="hidden" name="action" value="ois_cc_change_course"><input type="hidden" name="order_id" value="' . $id . '">'
-				. wp_nonce_field( 'ois_cc_change_course_' . $id, '_wpnonce', true, false )
-				. '<select name="course_id">';
-			foreach ( array_filter( OIS_CC_Courses::get_all_courses() ) as $c ) {
-				$html .= '<option value="' . (int) $c['id'] . '">' . esc_html( $c['title'] . ' — ৳' . number_format_i18n( $c['price'] ) ) . '</option>';
-			}
-			$html .= '</select> <button class="button button-small" onclick="return confirm(\'Change this paid order to the selected course?\')">Apply</button></form></details>';
-		}
 		return $html;
+	}
+
+	/** Admin-only Action column: a "Change course" button, or the balance's payment link. */
+	public function column_actions( $item ) {
+		$id = (int) $item['ID'];
+
+		if ( get_post_meta( $id, '_parent_order', true ) ) {
+			if ( ! OIS_CC_Orders::is_open( $item['status'] ) ) {
+				return '—';
+			}
+			return '<input type="text" readonly style="width:100%;max-width:240px" value="' . esc_attr( OIS_CC_Orders::pay_link( $id ) ) . '" onclick="this.select()"><br><span class="ois-cc-muted">Payment link — click to copy, send to student</span>';
+		}
+
+		if ( 'paid' !== $item['status'] || get_post_meta( $id, '_course_changed_from', true ) ) {
+			return '—';
+		}
+
+		$html = '<details><summary class="button button-small">Change course</summary><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" style="margin-top:6px">'
+			. '<input type="hidden" name="action" value="ois_cc_change_course"><input type="hidden" name="order_id" value="' . $id . '">'
+			. wp_nonce_field( 'ois_cc_change_course_' . $id, '_wpnonce', true, false )
+			. '<select name="course_id" style="max-width:240px">';
+		foreach ( array_filter( OIS_CC_Courses::get_all_courses() ) as $c ) {
+			$html .= '<option value="' . (int) $c['id'] . '">' . esc_html( $c['title'] . ' — ৳' . number_format_i18n( $c['price'] ) ) . '</option>';
+		}
+		return $html . '</select><br><button class="button button-primary button-small" style="margin-top:6px" onclick="return confirm(\'Change this paid order to the selected course?\')">Apply</button></form></details>';
 	}
 
 	public function column_student( $item ) {
