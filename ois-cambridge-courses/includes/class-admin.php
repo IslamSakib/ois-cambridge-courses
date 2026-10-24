@@ -197,9 +197,9 @@ class OIS_CC_Admin {
 			<h1 class="ois-cc-heading">Cambridge Courses — Transactions</h1>
 			<?php if ( isset( $_GET['ois_cc_sms'] ) ) : ?>
 				<?php if ( 'sent' === $_GET['ois_cc_sms'] ) : ?>
-					<div class="notice notice-success"><p>Course changed. The payment link was texted to the student.</p></div>
+					<div class="notice notice-success"><p>Course changed. The student was notified by SMS.</p></div>
 				<?php else : ?>
-					<div class="notice notice-warning"><p>Course changed, but the SMS could not be sent. Copy the payment link from the new Balance row and send it yourself.</p></div>
+					<div class="notice notice-warning"><p>Course changed, but the SMS could not be sent. Please tell the student yourself (for a balance, copy the payment link from the new Balance row).</p></div>
 				<?php endif; ?>
 			<?php endif; ?>
 

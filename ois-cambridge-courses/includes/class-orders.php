@@ -214,6 +214,20 @@ class OIS_CC_Orders {
 			$out['refund'] = -$diff;
 			update_post_meta( $order_id, '_amount', $course['price'] ); // revenue = what we keep
 			update_post_meta( $order_id, '_refund_due', $out['refund'] );
+
+			// ponytail: support number is the school line printed on the receipt (app.js); move to Settings if it changes.
+			$out['sms'] = (bool) get_option( 'ois_cc_sms_api_url' ) && ! is_wp_error(
+				OIS_CC_FEMS_API::send_sms(
+					get_post_meta( $order_id, '_student_mobile', true ),
+					sprintf(
+						'Hi %s, you changed your course to %s at Oxford International School. As it costs BDT %s less, please call our support on 01765855555 to collect your BDT %s refund in cash.',
+						strtok( trim( $order['student_name'] ), ' ' ),
+						$course['title'],
+						number_format_i18n( $out['refund'] ),
+						number_format_i18n( $out['refund'] )
+					)
+				)
+			);
 		}
 
 		update_post_meta( $order_id, '_course_changed_from', $order['course_title'] );
