@@ -151,6 +151,67 @@ class OIS_CC_Orders {
 		return in_array( $stored, array( 'pending', 'canceled', '' ), true );
 	}
 
+	/**
+	 * Student picked/paid for the wrong course. Paid orders stay immutable:
+	 * the order switches to the right course, and any shortfall becomes a
+	 * linked "balance" order the student pays through a token link. A
+	 * cheaper course just lowers the order and records the cash refund due.
+	 * Returns array( 'balance_order_id' => int, 'refund' => float ) or WP_Error.
+	 *
+	 * ponytail: one change per order — no chained re-adjustments.
+	 */
+	public static function change_course( $order_id, $course_id ) {
+		$order  = self::get_order_data( $order_id );
+		$course = OIS_CC_Courses::get_course_data( (int) $course_id );
+		if ( ! $order || 'paid' !== $order['status'] || get_post_meta( $order_id, '_parent_order', true ) || get_post_meta( $order_id, '_course_changed_from', true ) ) {
+			return new WP_Error( 'not_changeable', 'Only a paid, not-yet-adjusted order can be changed.' );
+		}
+		if ( ! $course || (int) $course_id === (int) get_post_meta( $order_id, '_course_id', true ) ) {
+			return new WP_Error( 'bad_course', 'Pick a different, valid course.' );
+		}
+
+		$diff = $course['price'] - $order['amount'];
+		$out  = array( 'balance_order_id' => 0, 'refund' => 0.0 );
+
+		if ( $diff > 0.009 ) {
+			$balance = self::create_order(
+				array(
+					'id'      => $order['student_id'],
+					'name'    => $order['student_name'],
+					'mobile'  => get_post_meta( $order_id, '_student_mobile', true ),
+					'class'   => $order['student_class'],
+					'section' => $order['student_section'],
+					'roll'    => $order['student_roll'],
+				),
+				array(
+					'id'    => $course['id'],
+					'title' => 'Balance: ' . $course['title'],
+					'price' => $diff,
+				)
+			);
+			if ( ! $balance ) {
+				return new WP_Error( 'order_failed', 'Could not create the balance order.' );
+			}
+			update_post_meta( $balance['order_id'], '_parent_order', $order['order_number'] );
+			$out['balance_order_id'] = $balance['order_id'];
+		} elseif ( $diff < -0.009 ) {
+			$out['refund'] = -$diff;
+			update_post_meta( $order_id, '_amount', $course['price'] ); // revenue = what we keep
+			update_post_meta( $order_id, '_refund_due', $out['refund'] );
+		}
+
+		update_post_meta( $order_id, '_course_changed_from', $order['course_title'] );
+		update_post_meta( $order_id, '_course_id', $course['id'] );
+		update_post_meta( $order_id, '_course_title', $course['title'] );
+
+		return $out;
+	}
+
+	/** Public payment link for an unpaid order (Moneybag checkout, no OTP). */
+	public static function pay_link( $order_id ) {
+		return add_query_arg( 'token', self::ensure_order_token( $order_id ), rest_url( 'ois-cc/v1/pay-link' ) );
+	}
+
 	public static function mark_canceled( $order_id ) {
 		update_post_meta( $order_id, '_status', 'canceled' );
 	}

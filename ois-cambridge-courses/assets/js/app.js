@@ -679,6 +679,9 @@
 
 		var formStudent = document.getElementById( 'ois-cc-form-student' );
 		if ( formStudent ) {
+			// Cursor ready in the field on arrival; preventScroll so the page
+			// doesn't jump down to the form on load.
+			document.getElementById( 'ois-cc-student-id' ).focus( { preventScroll: true } );
 			formStudent.addEventListener( 'submit', function ( e ) {
 				e.preventDefault();
 				var id = document.getElementById( 'ois-cc-student-id' ).value.trim();

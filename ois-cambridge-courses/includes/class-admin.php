@@ -24,6 +24,7 @@ class OIS_CC_Admin {
 		add_action( 'admin_init', array( $this, 'register_settings' ) );
 		add_filter( 'map_meta_cap', array( $this, 'map_meta_cap' ), 10, 4 );
 		add_action( 'admin_post_ois_cc_export_csv', array( $this, 'handle_export' ) );
+		add_action( 'admin_post_ois_cc_change_course', array( $this, 'handle_change_course' ) );
 		add_action( 'admin_post_ois_cc_add_user', array( $this, 'handle_add_user' ) );
 		add_action( 'admin_post_ois_cc_remove_user', array( $this, 'handle_remove_user' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
@@ -245,6 +246,22 @@ class OIS_CC_Admin {
 		} )();
 		</script>
 		<?php
+	}
+
+	public function handle_change_course() {
+		$order_id = isset( $_POST['order_id'] ) ? absint( $_POST['order_id'] ) : 0;
+		check_admin_referer( 'ois_cc_change_course_' . $order_id );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( 'Only administrators can change a paid order.' );
+		}
+
+		$result = OIS_CC_Orders::change_course( $order_id, isset( $_POST['course_id'] ) ? absint( $_POST['course_id'] ) : 0 );
+		if ( is_wp_error( $result ) ) {
+			wp_die( esc_html( $result->get_error_message() ), '', array( 'back_link' => true ) );
+		}
+
+		wp_safe_redirect( admin_url( 'admin.php?page=ois-cc-transactions' ) );
+		exit;
 	}
 
 	public function handle_export() {

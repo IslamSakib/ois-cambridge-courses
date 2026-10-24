@@ -97,7 +97,36 @@ class OIS_CC_Transactions_Table extends WP_List_Table {
 	}
 
 	public function column_order_number( $item ) {
-		return '<strong>' . esc_html( $item['order_number'] ) . '</strong>' . ( $item['txn_id'] ? '<br><span class="ois-cc-txn">' . esc_html( $item['txn_id'] ) . '</span>' : '' );
+		$id   = (int) $item['ID'];
+		$html = '<strong>' . esc_html( $item['order_number'] ) . '</strong>' . ( $item['txn_id'] ? '<br><span class="ois-cc-txn">' . esc_html( $item['txn_id'] ) . '</span>' : '' );
+
+		if ( $parent = get_post_meta( $id, '_parent_order', true ) ) {
+			$html .= '<br><span class="ois-cc-muted">Balance for ' . esc_html( $parent ) . '</span>';
+		}
+		if ( $from = get_post_meta( $id, '_course_changed_from', true ) ) {
+			$html .= '<br><span class="ois-cc-muted">Changed from ' . esc_html( $from ) . '</span>';
+		}
+		if ( $refund = (float) get_post_meta( $id, '_refund_due', true ) ) {
+			$html .= '<br><strong style="color:#b32d2e">Refund due ৳' . esc_html( number_format_i18n( $refund, 2 ) ) . ' (cash)</strong>';
+		}
+
+		// Adjustments are admin-only (the Accounts role can view, not alter).
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return $html;
+		}
+		if ( $parent && OIS_CC_Orders::is_open( $item['status'] ) ) {
+			$html .= '<br><input type="text" readonly class="ois-cc-paylink" style="width:100%;max-width:260px" value="' . esc_attr( OIS_CC_Orders::pay_link( $id ) ) . '" onclick="this.select()"><span class="ois-cc-muted">Payment link — send to student</span>';
+		} elseif ( 'paid' === $item['status'] && ! $parent && ! $from ) {
+			$html .= '<details><summary style="cursor:pointer;color:#2271b1">Change course</summary><form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">'
+				. '<input type="hidden" name="action" value="ois_cc_change_course"><input type="hidden" name="order_id" value="' . $id . '">'
+				. wp_nonce_field( 'ois_cc_change_course_' . $id, '_wpnonce', true, false )
+				. '<select name="course_id">';
+			foreach ( array_filter( OIS_CC_Courses::get_all_courses() ) as $c ) {
+				$html .= '<option value="' . (int) $c['id'] . '">' . esc_html( $c['title'] . ' — ৳' . number_format_i18n( $c['price'] ) ) . '</option>';
+			}
+			$html .= '</select> <button class="button button-small" onclick="return confirm(\'Change this paid order to the selected course?\')">Apply</button></form></details>';
+		}
+		return $html;
 	}
 
 	public function column_student( $item ) {

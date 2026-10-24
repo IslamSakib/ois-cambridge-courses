@@ -152,6 +152,19 @@ class OIS_CC_REST_API {
 
 		register_rest_route(
 			self::NS,
+			'/pay-link',
+			array(
+				'methods'             => 'GET',
+				'callback'            => array( $this, 'pay_link' ),
+				'permission_callback' => '__return_true',
+				'args'                => array(
+					'token' => array( 'required' => true, 'type' => 'string' ),
+				),
+			)
+		);
+
+		register_rest_route(
+			self::NS,
 			'/moneybag-ipn',
 			array(
 				'methods'             => 'POST',
@@ -375,10 +388,11 @@ class OIS_CC_REST_API {
 		}
 
 		// Moneybag requires a customer email; there's no email step on our
-		// side, so use the one FEMS has on file, else the site admin's.
+		// side, so use the one FEMS has on file, else the school's support
+		// address (never the WP admin email — that's a personal inbox).
 		$email = sanitize_email( (string) $request->get_param( 'email' ) );
 		if ( ! $email ) {
-			$email = ! empty( $student['email'] ) ? $student['email'] : get_option( 'admin_email' );
+			$email = ! empty( $student['email'] ) ? $student['email'] : ( get_option( 'ois_cc_support_email' ) ?: 'info@ois.edu.bd' );
 		}
 		if ( ! is_email( $email ) ) {
 			return new WP_Error( 'invalid_email', 'A valid email is required to continue to payment.', array( 'status' => 400 ) );
@@ -389,6 +403,15 @@ class OIS_CC_REST_API {
 			return new WP_Error( 'missing_return_url', 'Missing return URL.', array( 'status' => 400 ) );
 		}
 
+		if ( wp_parse_url( $return_url, PHP_URL_HOST ) === wp_parse_url( home_url(), PHP_URL_HOST ) ) {
+			update_option( 'ois_cc_return_url', $return_url, false ); // where /pay-link sends students back to
+		}
+
+		$url = $this->start_checkout( $order_id, $order, $student['mobile'], $email, $return_url );
+		return is_wp_error( $url ) ? $url : rest_ensure_response( array( 'redirect' => $url ) );
+	}
+
+	private function start_checkout( $order_id, $order, $mobile, $email, $return_url ) {
 		$token = OIS_CC_Orders::ensure_order_token( $order_id );
 
 		$checkout = OIS_CC_Moneybag_API::create_checkout(
@@ -396,7 +419,7 @@ class OIS_CC_REST_API {
 			array(
 				'name'  => $order['student_name'],
 				'email' => $email,
-				'phone'   => self::normalize_phone( $student['mobile'] ),
+				'phone'   => self::normalize_phone( $mobile ),
 				'country' => 'Bangladesh',
 			),
 			array(
@@ -415,7 +438,31 @@ class OIS_CC_REST_API {
 			update_post_meta( $order_id, '_moneybag_session_id', $checkout['session_id'] );
 		}
 
-		return rest_ensure_response( array( 'redirect' => $checkout['checkout_url'] ) );
+		return $checkout['checkout_url'];
+	}
+
+	/**
+	 * Payment link customer care sends a student for a balance order: the
+	 * unguessable order token stands in for the OTP session, and the amount
+	 * comes from the stored order, never from the request.
+	 */
+	public function pay_link( WP_REST_Request $request ) {
+		$order = OIS_CC_Orders::get_order_by_token( sanitize_text_field( $request->get_param( 'token' ) ) );
+		if ( ! $order || ! OIS_CC_Orders::is_open( $order['status'] ) || ! get_post_meta( $order['order_id'], '_parent_order', true ) ) {
+			return new WP_Error( 'order_not_found', 'This payment link is invalid or already used.', array( 'status' => 404 ) );
+		}
+		if ( ! OIS_CC_Moneybag_API::is_live() ) {
+			return new WP_Error( 'gateway_unavailable', 'Online payment is temporarily unavailable. Please try again later.', array( 'status' => 503 ) );
+		}
+
+		$email = get_option( 'ois_cc_support_email' ) ?: 'info@ois.edu.bd';
+		$url   = $this->start_checkout( $order['order_id'], $order, get_post_meta( $order['order_id'], '_student_mobile', true ), $email, get_option( 'ois_cc_return_url' ) ?: home_url( '/' ) );
+		if ( is_wp_error( $url ) ) {
+			return $url;
+		}
+
+		wp_redirect( $url ); // phpcs:ignore WordPress.Security.SafeRedirect -- Moneybag's host
+		exit;
 	}
 
 	/**
