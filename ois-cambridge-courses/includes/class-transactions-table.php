@@ -129,7 +129,14 @@ class OIS_CC_Transactions_Table extends WP_List_Table {
 			return '<input type="text" readonly style="width:100%;max-width:240px" value="' . esc_attr( OIS_CC_Orders::pay_link( $id ) ) . '" onclick="this.select()"><br><span class="ois-cc-muted">Payment link — click to copy, send to student</span>';
 		}
 
-		if ( 'paid' !== $item['status'] || get_post_meta( $id, '_course_changed_from', true ) ) {
+		if ( 'paid' !== $item['status'] ) {
+			if ( ! get_post_meta( $id, '_moneybag_txn_id', true ) ) {
+				return '—';
+			}
+			return '<a class="button button-small" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=ois_cc_recheck&order_id=' . $id ), 'ois_cc_recheck_' . $id ) ) . '">Re-check with Moneybag</a>';
+		}
+
+		if ( get_post_meta( $id, '_course_changed_from', true ) ) {
 			return '—';
 		}
 

@@ -154,13 +154,25 @@ class OIS_CC_Moneybag_API {
 			)
 		);
 		foreach ( $ids as $order_id ) {
-			$txn_id = get_post_meta( $order_id, '_moneybag_txn_id', true );
-			$record = self::verify_transaction( $txn_id );
-			$order  = OIS_CC_Orders::get_order_data( $order_id );
-			if ( ! is_wp_error( $record ) && self::matches_order( $record, $order ) ) {
-				OIS_CC_Orders::mark_paid( $order_id, $txn_id, ! empty( $record['payment_method'] ) ? $record['payment_method'] : 'moneybag' );
-			}
+			self::recheck_order( $order_id );
 		}
+	}
+
+	/** Re-verify one unpaid order. Returns 'paid', 'unchanged' or 'error'. */
+	public static function recheck_order( $order_id ) {
+		$txn_id = get_post_meta( $order_id, '_moneybag_txn_id', true );
+		if ( ! $txn_id || ! self::is_live() ) {
+			return 'error';
+		}
+		$record = self::verify_transaction( $txn_id );
+		if ( is_wp_error( $record ) ) {
+			return 'error';
+		}
+		if ( ! self::matches_order( $record, OIS_CC_Orders::get_order_data( $order_id ) ) ) {
+			return 'unchanged';
+		}
+		OIS_CC_Orders::mark_paid( $order_id, $txn_id, ! empty( $record['payment_method'] ) ? $record['payment_method'] : 'moneybag' );
+		return 'paid';
 	}
 
 	/**

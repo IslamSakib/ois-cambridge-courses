@@ -25,6 +25,7 @@ class OIS_CC_Admin {
 		add_filter( 'map_meta_cap', array( $this, 'map_meta_cap' ), 10, 4 );
 		add_action( 'admin_post_ois_cc_export_csv', array( $this, 'handle_export' ) );
 		add_action( 'admin_post_ois_cc_change_course', array( $this, 'handle_change_course' ) );
+		add_action( 'admin_post_ois_cc_recheck', array( $this, 'handle_recheck' ) );
 		add_action( 'admin_post_ois_cc_add_user', array( $this, 'handle_add_user' ) );
 		add_action( 'admin_post_ois_cc_remove_user', array( $this, 'handle_remove_user' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
@@ -195,6 +196,17 @@ class OIS_CC_Admin {
 		?>
 		<div class="wrap ois-cc-wrap">
 			<h1 class="ois-cc-heading">Cambridge Courses — Transactions</h1>
+			<?php
+			$recheck = array(
+				'paid'      => array( 'success', 'Moneybag confirms this payment — the order is now Success.' ),
+				'unchanged' => array( 'info', 'Moneybag does not show a completed payment for this order yet. Nothing changed.' ),
+				'error'     => array( 'warning', 'Could not reach Moneybag to re-check. Please try again shortly.' ),
+			);
+			if ( isset( $_GET['ois_cc_recheck'], $recheck[ $_GET['ois_cc_recheck'] ] ) ) :
+				$r = $recheck[ $_GET['ois_cc_recheck'] ];
+				?>
+				<div class="notice notice-<?php echo esc_attr( $r[0] ); ?>"><p><?php echo esc_html( $r[1] ); ?></p></div>
+			<?php endif; ?>
 			<?php if ( isset( $_GET['ois_cc_sms'] ) ) : ?>
 				<?php if ( 'sent' === $_GET['ois_cc_sms'] ) : ?>
 					<div class="notice notice-success"><p>Course changed. The student was notified by SMS.</p></div>
@@ -253,6 +265,17 @@ class OIS_CC_Admin {
 		} )();
 		</script>
 		<?php
+	}
+
+	public function handle_recheck() {
+		$order_id = isset( $_GET['order_id'] ) ? absint( $_GET['order_id'] ) : 0;
+		check_admin_referer( 'ois_cc_recheck_' . $order_id );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( 'Only administrators can re-check a payment.' );
+		}
+		$result = OIS_CC_Moneybag_API::recheck_order( $order_id );
+		wp_safe_redirect( add_query_arg( array( 'page' => 'ois-cc-transactions', 'ois_cc_recheck' => $result ), admin_url( 'admin.php' ) ) );
+		exit;
 	}
 
 	public function handle_change_course() {
