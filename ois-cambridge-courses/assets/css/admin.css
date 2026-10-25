@@ -46,3 +46,8 @@
 .ois-cc-muted { color: #64748b; font-size: 12px; }
 .ois-cc-txn { color: #64748b; font-size: 11px; }
 .ois-cc-date { display: inline-flex; align-items: center; gap: 4px; margin-right: 6px; }
+
+.ois-cc-resync .dashicons{vertical-align:middle;margin-top:-2px;font-size:16px;width:16px;height:16px}
+.ois-cc-resync.is-syncing{pointer-events:none;opacity:.7}
+.ois-cc-resync.is-syncing .dashicons{animation:ois-cc-spin 1s linear infinite}
+@keyframes ois-cc-spin{to{transform:rotate(360deg)}}
