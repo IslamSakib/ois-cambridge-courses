@@ -560,6 +560,10 @@ class OIS_CC_REST_API {
 			$status = strtolower( (string) substr( strrchr( '.' . $event, '.' ), 1 ) );
 		}
 		update_post_meta( $order_id, '_moneybag_status', sanitize_key( $status ) );
+		if ( $txn_id ) {
+			// Kept even for cancelled/failed so the reconcile cron can re-check it later.
+			update_post_meta( $order_id, '_moneybag_txn_id', sanitize_text_field( $txn_id ) );
+		}
 
 		if ( in_array( $status, array( 'success', 'successful', 'completed', 'paid' ), true ) ) {
 			if ( ! $txn_id ) {

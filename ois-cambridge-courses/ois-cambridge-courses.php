@@ -2,7 +2,7 @@
 /**
  * Plugin Name: OIS Cambridge Courses
  * Description: Student-ID + OTP verified checkout flow for Oxford International School's Cambridge courses. Drop the [ois_cambridge_courses] shortcode into any page (works inside Elementor's Shortcode widget).
- * Version: 1.8.15
+ * Version: 1.8.16
  * Author: Sakib Islam
  * Author URI: tel:01950025990
  * Text Domain: ois-cc
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'OIS_CC_VERSION', '1.8.15' );
+define( 'OIS_CC_VERSION', '1.8.16' );
 define( 'OIS_CC_FILE', __FILE__ );
 define( 'OIS_CC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'OIS_CC_URL', plugin_dir_url( __FILE__ ) );
@@ -99,6 +99,25 @@ function ois_cc_activate() {
 register_activation_hook( __FILE__, 'ois_cc_activate' );
 
 function ois_cc_deactivate() {
+	wp_clear_scheduled_hook( 'ois_cc_reconcile' );
 	flush_rewrite_rules();
 }
+
+// Scheduled on init (not just activation) so zip-upload updates pick it up too.
+add_action( 'ois_cc_reconcile', array( 'OIS_CC_Moneybag_API', 'reconcile_open_orders' ) );
+add_action(
+	'init',
+	function () {
+		if ( ! wp_next_scheduled( 'ois_cc_reconcile' ) ) {
+			wp_schedule_event( time() + 300, 'ois_cc_every_10_min', 'ois_cc_reconcile' );
+		}
+	}
+);
+add_filter(
+	'cron_schedules',
+	function ( $s ) {
+		$s['ois_cc_every_10_min'] = array( 'interval' => 600, 'display' => 'Every 10 minutes' );
+		return $s;
+	}
+);
 register_deactivation_hook( __FILE__, 'ois_cc_deactivate' );

@@ -129,6 +129,41 @@ class OIS_CC_Moneybag_API {
 	}
 
 	/**
+	 * Cron: re-verify unpaid orders (last 30 days, with a known transaction id)
+	 * so a payment Moneybag corrects later — with or without a webhook —
+	 * flips the order to Success. Same verify + matches_order gate as the IPN.
+	 *
+	 * ponytail: capped at 50 orders per run, oldest-first not guaranteed;
+	 * raise the cap or paginate if more than that are ever unpaid at once.
+	 */
+	public static function reconcile_open_orders() {
+		if ( ! self::is_live() ) {
+			return;
+		}
+		$ids = get_posts(
+			array(
+				'post_type'      => OIS_CC_Orders::POST_TYPE,
+				'post_status'    => 'publish',
+				'posts_per_page' => 50,
+				'fields'         => 'ids',
+				'date_query'     => array( array( 'after' => '30 days ago' ) ),
+				'meta_query'     => array(
+					array( 'key' => '_moneybag_txn_id', 'compare' => '!=', 'value' => '' ),
+					array( 'key' => '_status', 'value' => array( 'paid' ), 'compare' => 'NOT IN' ),
+				),
+			)
+		);
+		foreach ( $ids as $order_id ) {
+			$txn_id = get_post_meta( $order_id, '_moneybag_txn_id', true );
+			$record = self::verify_transaction( $txn_id );
+			$order  = OIS_CC_Orders::get_order_data( $order_id );
+			if ( ! is_wp_error( $record ) && self::matches_order( $record, $order ) ) {
+				OIS_CC_Orders::mark_paid( $order_id, $txn_id, ! empty( $record['payment_method'] ) ? $record['payment_method'] : 'moneybag' );
+			}
+		}
+	}
+
+	/**
 	 * Verify an inbound IPN/webhook request: HMAC-SHA256 of
 	 * "<timestamp>.<raw-body>" against the X-Webhook-Signature header
 	 * (format "sha256=<hex>"), using the secret from Settings.
