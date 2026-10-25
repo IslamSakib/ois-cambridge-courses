@@ -133,20 +133,21 @@ class OIS_CC_Moneybag_API {
 	 * so a payment Moneybag corrects later — with or without a webhook —
 	 * flips the order to Success. Same verify + matches_order gate as the IPN.
 	 *
-	 * ponytail: capped at 50 orders per run, oldest-first not guaranteed;
-	 * raise the cap or paginate if more than that are ever unpaid at once.
+	 * ponytail: capped per run (cron 50, manual button 200); raise or paginate
+	 * if more than that are ever unpaid at once.
 	 */
-	public static function reconcile_open_orders() {
+	public static function reconcile_open_orders( $days = 30, $limit = 50 ) {
+		$out = array( 'checked' => 0, 'paid' => 0, 'errors' => 0 );
 		if ( ! self::is_live() ) {
-			return;
+			return $out;
 		}
 		$ids = get_posts(
 			array(
 				'post_type'      => OIS_CC_Orders::POST_TYPE,
 				'post_status'    => 'publish',
-				'posts_per_page' => 50,
+				'posts_per_page' => $limit,
 				'fields'         => 'ids',
-				'date_query'     => array( array( 'after' => '30 days ago' ) ),
+				'date_query'     => $days ? array( array( 'after' => $days . ' days ago' ) ) : array(),
 				'meta_query'     => array(
 					array( 'key' => '_moneybag_txn_id', 'compare' => '!=', 'value' => '' ),
 					array( 'key' => '_status', 'value' => array( 'paid' ), 'compare' => 'NOT IN' ),
@@ -154,8 +155,15 @@ class OIS_CC_Moneybag_API {
 			)
 		);
 		foreach ( $ids as $order_id ) {
-			self::recheck_order( $order_id );
+			$r = self::recheck_order( $order_id );
+			$out['checked']++;
+			if ( 'paid' === $r ) {
+				$out['paid']++;
+			} elseif ( 'error' === $r ) {
+				$out['errors']++;
+			}
 		}
+		return $out;
 	}
 
 	/** Re-verify one unpaid order. Returns 'paid', 'unchanged' or 'error'. */

@@ -129,14 +129,7 @@ class OIS_CC_Transactions_Table extends WP_List_Table {
 			return '<input type="text" readonly style="width:100%;max-width:240px" value="' . esc_attr( OIS_CC_Orders::pay_link( $id ) ) . '" onclick="this.select()"><br><span class="ois-cc-muted">Payment link — click to copy, send to student</span>';
 		}
 
-		if ( 'paid' !== $item['status'] ) {
-			if ( ! get_post_meta( $id, '_moneybag_txn_id', true ) ) {
-				return '—';
-			}
-			return '<a class="button button-small" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=ois_cc_recheck&order_id=' . $id ), 'ois_cc_recheck_' . $id ) ) . '">Re-check with Moneybag</a>';
-		}
-
-		if ( get_post_meta( $id, '_course_changed_from', true ) ) {
+		if ( 'paid' !== $item['status'] || get_post_meta( $id, '_course_changed_from', true ) ) {
 			return '—';
 		}
 
@@ -224,6 +217,9 @@ class OIS_CC_Transactions_Table extends WP_List_Table {
 				<a class="button" href="<?php echo esc_url( admin_url( 'admin.php?page=ois-cc-transactions' ) ); ?>">Reset</a>
 			<?php endif; ?>
 			<a class="button" href="<?php echo esc_url( wp_nonce_url( add_query_arg( urlencode_deep( array_merge( $filters, array( 's' => $filters['search'], 'action' => 'ois_cc_export_csv' ) ) ), admin_url( 'admin-post.php' ) ), 'ois_cc_export_csv' ) ); ?>">Export CSV</a>
+			<?php if ( current_user_can( 'manage_options' ) && OIS_CC_Moneybag_API::is_live() ) : ?>
+				<a class="button" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=ois_cc_resync' ), 'ois_cc_resync' ) ); ?>" onclick="return confirm('Re-check every unpaid transaction with Moneybag and update its status?')">Re-sync with Moneybag</a>
+			<?php endif; ?>
 		</div>
 		<?php
 	}
