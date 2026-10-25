@@ -261,8 +261,8 @@ class OIS_CC_Admin {
 
 	public function handle_resync() {
 		check_admin_referer( 'ois_cc_resync' );
-		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( 'Only administrators can re-sync payments.' );
+		if ( ! current_user_can( self::CAP ) ) {
+			wp_die( 'You do not have access to re-sync payments.' );
 		}
 		set_time_limit( 120 );
 		$r = OIS_CC_Moneybag_API::reconcile_open_orders( 0, 200 );
