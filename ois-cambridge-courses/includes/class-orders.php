@@ -344,6 +344,7 @@ class OIS_CC_Orders {
 		$sql = "SELECT p.ID, p.post_title AS order_number, p.post_date,
 					pm_sid.meta_value AS student_id,
 					pm_sname.meta_value AS student_name,
+					pm_sclass.meta_value AS student_class,
 					pm_course.meta_value AS course_title,
 					pm_amount.meta_value AS amount,
 					pm_status.meta_value AS status,
@@ -372,6 +373,7 @@ class OIS_CC_Orders {
 		$join = "
 			LEFT JOIN {$wpdb->postmeta} pm_sid ON pm_sid.post_id = p.ID AND pm_sid.meta_key = '_student_id'
 			LEFT JOIN {$wpdb->postmeta} pm_sname ON pm_sname.post_id = p.ID AND pm_sname.meta_key = '_student_name'
+			LEFT JOIN {$wpdb->postmeta} pm_sclass ON pm_sclass.post_id = p.ID AND pm_sclass.meta_key = '_student_class'
 			LEFT JOIN {$wpdb->postmeta} pm_course ON pm_course.post_id = p.ID AND pm_course.meta_key = '_course_title'
 			LEFT JOIN {$wpdb->postmeta} pm_amount ON pm_amount.post_id = p.ID AND pm_amount.meta_key = '_amount'
 			LEFT JOIN {$wpdb->postmeta} pm_status ON pm_status.post_id = p.ID AND pm_status.meta_key = '_status'

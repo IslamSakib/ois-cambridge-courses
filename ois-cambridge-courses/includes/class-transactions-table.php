@@ -149,7 +149,8 @@ class OIS_CC_Transactions_Table extends WP_List_Table {
 	}
 
 	public function column_student( $item ) {
-		return esc_html( $item['student_name'] ) . '<br><span class="ois-cc-muted">ID: ' . esc_html( $item['student_id'] ) . '</span>';
+		return esc_html( $item['student_name'] ) . '<br><span class="ois-cc-muted">ID: ' . esc_html( $item['student_id'] ) . '</span>'
+			. ( $item['student_class'] ? '<br><span class="ois-cc-muted">' . esc_html( $item['student_class'] ) . '</span>' : '' );
 	}
 
 	public function column_amount( $item ) {
