@@ -140,7 +140,14 @@ $GLOBALS['remote'] = array( 'body' => '{"data":{"order_id":"OIS-7","amount":"500
 check( 're-check still failed stays unpaid', 'unchanged' === OIS_CC_Moneybag_API::recheck_order( 7 ) && 'paid' !== $GLOBALS['meta'][7]['_status'] );
 $GLOBALS['remote'] = array( 'code' => 500, 'body' => '{}' );
 check( 'Moneybag error -> error, nothing paid', 'error' === OIS_CC_Moneybag_API::recheck_order( 7 ) && 'paid' !== $GLOBALS['meta'][7]['_status'] );
-check( 'order without a txn id is not re-checked', 'error' === OIS_CC_Moneybag_API::recheck_order( 8 ) && 'paid' !== $GLOBALS['meta'][7]['_status'] );
+check( 'order with nothing to look up is left unchanged', 'unchanged' === OIS_CC_Moneybag_API::recheck_order( 8 ) && 'paid' !== $GLOBALS['meta'][7]['_status'] );
+// No stored txn id: falls back to the order number, still needs a full match.
+$GLOBALS['meta'][9] = array( '_order_number' => 'OIS-9', '_amount' => '5000', '_status' => 'canceled' );
+$GLOBALS['remote'] = array( 'body' => '{"data":{"order_id":"OIS-9","amount":"5000","status":"SUCCESS","verified":true,"transaction_id":"TXN9"}}' );
+check( 'no txn id: found by order number, marked paid with the real txn id', 'paid' === OIS_CC_Moneybag_API::recheck_order( 9 ) && 'paid' === $GLOBALS['meta'][9]['_status'] && 'TXN9' === $GLOBALS['meta'][9]['_txn_id'] );
+$GLOBALS['meta'][9] = array( '_order_number' => 'OIS-9', '_amount' => '5000', '_status' => 'canceled' );
+$GLOBALS['remote'] = array( 'code' => 404, 'body' => '{}' );
+check( 'no txn id: Moneybag does not know it -> unchanged, not an error', 'unchanged' === OIS_CC_Moneybag_API::recheck_order( 9 ) && 'paid' !== $GLOBALS['meta'][9]['_status'] );
 
 echo $fails ? "\n$fails FAILED\n" : "\nALL PASSED\n";
 exit( $fails ? 1 : 0 );

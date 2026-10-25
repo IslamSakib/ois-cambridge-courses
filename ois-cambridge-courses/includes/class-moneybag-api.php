@@ -166,19 +166,40 @@ class OIS_CC_Moneybag_API {
 		return $out;
 	}
 
-	/** Re-verify one unpaid order. Returns 'paid', 'unchanged' or 'error'. */
+	/**
+	 * Re-verify one unpaid order. Returns 'paid', 'unchanged' or 'error'.
+	 *
+	 * ponytail: with no stored transaction id (abandoned or old cancelled
+	 * orders) the order number is tried as the verify id; if Moneybag doesn't
+	 * know it, that's 'unchanged', not an error. matches_order() still has to
+	 * confirm order number + full amount, so a stray hit can't mark it paid.
+	 */
 	public static function recheck_order( $order_id ) {
-		$txn_id = get_post_meta( $order_id, '_moneybag_txn_id', true );
-		if ( ! $txn_id || ! self::is_live() ) {
+		if ( ! self::is_live() ) {
 			return 'error';
+		}
+		$txn_id   = get_post_meta( $order_id, '_moneybag_txn_id', true );
+		$fallback = ! $txn_id;
+		if ( $fallback ) {
+			$txn_id = get_post_meta( $order_id, '_order_number', true );
+		}
+		if ( ! $txn_id ) {
+			return 'unchanged';
 		}
 		$record = self::verify_transaction( $txn_id );
 		if ( is_wp_error( $record ) ) {
-			return 'error';
+			return $fallback ? 'unchanged' : 'error';
 		}
 		if ( ! self::matches_order( $record, OIS_CC_Orders::get_order_data( $order_id ) ) ) {
 			return 'unchanged';
 		}
+		foreach ( array( 'transaction_id', 'trx_id' ) as $key ) {
+			if ( $fallback && ! empty( $record[ $key ] ) ) {
+				$txn_id = $record[ $key ];
+				break;
+			}
+		}
+		update_post_meta( $order_id, '_moneybag_txn_id', $txn_id );
 		OIS_CC_Orders::mark_paid( $order_id, $txn_id, ! empty( $record['payment_method'] ) ? $record['payment_method'] : 'moneybag' );
 		return 'paid';
 	}
