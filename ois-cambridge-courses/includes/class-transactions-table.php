@@ -217,7 +217,7 @@ class OIS_CC_Transactions_Table extends WP_List_Table {
 				<a class="button" href="<?php echo esc_url( admin_url( 'admin.php?page=ois-cc-transactions' ) ); ?>">Reset</a>
 			<?php endif; ?>
 			<a class="button" href="<?php echo esc_url( wp_nonce_url( add_query_arg( urlencode_deep( array_merge( $filters, array( 's' => $filters['search'], 'action' => 'ois_cc_export_csv' ) ) ), admin_url( 'admin-post.php' ) ), 'ois_cc_export_csv' ) ); ?>">Export CSV</a>
-			<?php if ( current_user_can( 'manage_options' ) && OIS_CC_Moneybag_API::is_live() ) : ?>
+			<?php if ( current_user_can( OIS_CC_Admin::CAP ) && OIS_CC_Moneybag_API::is_live() ) : ?>
 				<a class="button ois-cc-resync" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=ois_cc_resync' ), 'ois_cc_resync' ) ); ?>" onclick="this.classList.add('is-syncing');this.lastChild.textContent=' Re-syncing...'"><span class="dashicons dashicons-update"></span><span> Re-sync with Moneybag</span></a>
 			<?php endif; ?>
 		</div>
