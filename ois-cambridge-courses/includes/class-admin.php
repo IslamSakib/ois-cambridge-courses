@@ -313,7 +313,7 @@ class OIS_CC_Admin {
 		header( 'Content-Disposition: attachment; filename=ois-cc-transactions-' . gmdate( 'Y-m-d' ) . '.csv' );
 
 		$out = fopen( 'php://output', 'w' );
-		fputcsv( $out, array( 'Order #', 'Student Name', 'Student ID', 'Course', 'Amount (BDT)', 'Status', 'Payment Method', 'Transaction ID', 'Date' ) );
+		fputcsv( $out, array( 'Order #', 'Student Name', 'Student ID', 'Class', 'Course', 'Amount (BDT)', 'Status', 'Payment Method', 'Transaction ID', 'Date' ) );
 
 		foreach ( $result['rows'] as $row ) {
 			fputcsv(
@@ -324,6 +324,7 @@ class OIS_CC_Admin {
 						$row['order_number'],
 						$row['student_name'],
 						$row['student_id'],
+						$row['student_class'],
 						$row['course_title'],
 						$row['amount'],
 						OIS_CC_Orders::status_label( $row['status'] ),
