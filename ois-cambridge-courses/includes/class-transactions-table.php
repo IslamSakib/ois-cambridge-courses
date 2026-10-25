@@ -34,10 +34,8 @@ class OIS_CC_Transactions_Table extends WP_List_Table {
 			'status'       => 'Status',
 			'post_date'    => 'Date',
 		);
-		// Adjustments are admin-only (the Accounts role can view, not alter).
-		if ( current_user_can( 'manage_options' ) ) {
-			$columns['actions'] = 'Action';
-		}
+		// Course changes are admin-only (the Accounts role can view and sync, not alter).
+		$columns['actions'] = 'Action';
 		return $columns;
 	}
 
@@ -129,7 +127,14 @@ class OIS_CC_Transactions_Table extends WP_List_Table {
 			return '<input type="text" readonly style="width:100%;max-width:240px" value="' . esc_attr( OIS_CC_Orders::pay_link( $id ) ) . '" onclick="this.select()"><br><span class="ois-cc-muted">Payment link — click to copy, send to student</span>';
 		}
 
-		if ( 'paid' !== $item['status'] || get_post_meta( $id, '_course_changed_from', true ) ) {
+		if ( 'paid' !== $item['status'] ) {
+			if ( ! get_post_meta( $id, '_moneybag_txn_id', true ) || ! OIS_CC_Moneybag_API::is_live() ) {
+				return '—';
+			}
+			return '<a class="button button-small ois-cc-resync" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=ois_cc_recheck&order_id=' . $id ), 'ois_cc_recheck_' . $id ) ) . '" onclick="this.classList.add(\'is-syncing\');this.lastChild.textContent=\' Syncing...\'"><span class="dashicons dashicons-update"></span><span> Sync</span></a>';
+		}
+
+		if ( get_post_meta( $id, '_course_changed_from', true ) || ! current_user_can( 'manage_options' ) ) {
 			return '—';
 		}
 
@@ -217,9 +222,6 @@ class OIS_CC_Transactions_Table extends WP_List_Table {
 				<a class="button" href="<?php echo esc_url( admin_url( 'admin.php?page=ois-cc-transactions' ) ); ?>">Reset</a>
 			<?php endif; ?>
 			<a class="button" href="<?php echo esc_url( wp_nonce_url( add_query_arg( urlencode_deep( array_merge( $filters, array( 's' => $filters['search'], 'action' => 'ois_cc_export_csv' ) ) ), admin_url( 'admin-post.php' ) ), 'ois_cc_export_csv' ) ); ?>">Export CSV</a>
-			<?php if ( current_user_can( OIS_CC_Admin::CAP ) && OIS_CC_Moneybag_API::is_live() ) : ?>
-				<a class="button ois-cc-resync" href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=ois_cc_resync' ), 'ois_cc_resync' ) ); ?>" onclick="this.classList.add('is-syncing');this.lastChild.textContent=' Re-syncing...'"><span class="dashicons dashicons-update"></span><span> Re-sync with Moneybag</span></a>
-			<?php endif; ?>
 		</div>
 		<?php
 	}
