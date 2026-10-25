@@ -201,6 +201,7 @@ class OIS_CC_Admin {
 				'paid'      => array( 'success', 'Moneybag confirms this payment: the order is now Success.' ),
 				'unchanged' => array( 'info', 'Moneybag does not show a completed payment for this order yet. Nothing changed.' ),
 				'error'     => array( 'warning', 'Could not reach Moneybag to re-check. Please try again shortly.' ),
+				'ineligible' => array( 'info', 'Only Failed orders from the last 3 days can be synced.' ),
 			);
 			if ( isset( $_GET['ois_cc_recheck'], $recheck[ $_GET['ois_cc_recheck'] ] ) ) :
 				$r = $recheck[ $_GET['ois_cc_recheck'] ];

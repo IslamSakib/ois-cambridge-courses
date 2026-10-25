@@ -12,6 +12,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class OIS_CC_Moneybag_API {
 
 	const WEBHOOK_TOLERANCE = 5 * MINUTE_IN_SECONDS;
+	const SYNC_DAYS         = 3; // only Failed orders this young are re-checked
 
 	public static function is_live() {
 		return (bool) get_option( 'ois_cc_moneybag_api_key' );
@@ -129,14 +130,14 @@ class OIS_CC_Moneybag_API {
 	}
 
 	/**
-	 * Cron: re-verify unpaid orders (last 30 days, with a known transaction id)
-	 * so a payment Moneybag corrects later — with or without a webhook —
-	 * flips the order to Success. Same verify + matches_order gate as the IPN.
+	 * Cron: re-verify Failed orders from the last SYNC_DAYS days so a payment
+	 * Moneybag corrects later — with or without a webhook — flips the order to
+	 * Success. Same verify + matches_order gate as the IPN.
 	 *
-	 * ponytail: capped per run (cron 50, manual button 200); raise or paginate
-	 * if more than that are ever unpaid at once.
+	 * ponytail: capped at 50 orders per run; raise or paginate if more than
+	 * that are ever Failed within the window.
 	 */
-	public static function reconcile_open_orders( $days = 30, $limit = 50 ) {
+	public static function reconcile_open_orders( $days = self::SYNC_DAYS, $limit = 50 ) {
 		$out = array( 'checked' => 0, 'paid' => 0, 'errors' => 0 );
 		if ( ! self::is_live() ) {
 			return $out;
@@ -149,8 +150,7 @@ class OIS_CC_Moneybag_API {
 				'fields'         => 'ids',
 				'date_query'     => $days ? array( array( 'after' => $days . ' days ago' ) ) : array(),
 				'meta_query'     => array(
-					array( 'key' => '_moneybag_txn_id', 'compare' => '!=', 'value' => '' ),
-					array( 'key' => '_status', 'value' => array( 'paid' ), 'compare' => 'NOT IN' ),
+					array( 'key' => '_status', 'value' => 'failed' ),
 				),
 			)
 		);
@@ -166,8 +166,15 @@ class OIS_CC_Moneybag_API {
 		return $out;
 	}
 
+	/** Only Failed orders from the last SYNC_DAYS days can be synced (button and cron). */
+	public static function sync_eligible( $order_id ) {
+		return 'failed' === get_post_meta( $order_id, '_status', true )
+			&& time() - (int) get_post_time( 'U', true, $order_id ) <= self::SYNC_DAYS * DAY_IN_SECONDS;
+	}
+
 	/**
-	 * Re-verify one unpaid order. Returns 'paid', 'unchanged' or 'error'.
+	 * Re-verify one Failed order. Returns 'paid', 'unchanged', 'error' or
+	 * 'ineligible' (not Failed, or older than SYNC_DAYS days).
 	 *
 	 * ponytail: with no stored transaction id (abandoned or old cancelled
 	 * orders) the order number is tried as the verify id; if Moneybag doesn't
@@ -177,6 +184,9 @@ class OIS_CC_Moneybag_API {
 	public static function recheck_order( $order_id ) {
 		if ( ! self::is_live() ) {
 			return 'error';
+		}
+		if ( ! self::sync_eligible( $order_id ) ) {
+			return 'ineligible';
 		}
 		$txn_id   = get_post_meta( $order_id, '_moneybag_txn_id', true );
 		$fallback = ! $txn_id;

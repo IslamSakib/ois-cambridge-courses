@@ -2,7 +2,7 @@
 /**
  * Plugin Name: OIS Cambridge Courses
  * Description: Student-ID + OTP verified checkout flow for Oxford International School's Cambridge courses. Drop the [ois_cambridge_courses] shortcode into any page (works inside Elementor's Shortcode widget).
- * Version: 1.8.24
+ * Version: 1.8.25
  * Author: Sakib Islam
  * Author URI: tel:01950025990
  * Text Domain: ois-cc
@@ -14,7 +14,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'OIS_CC_VERSION', '1.8.24' );
+define( 'OIS_CC_VERSION', '1.8.25' );
 define( 'OIS_CC_FILE', __FILE__ );
 define( 'OIS_CC_DIR', plugin_dir_path( __FILE__ ) );
 define( 'OIS_CC_URL', plugin_dir_url( __FILE__ ) );
@@ -108,15 +108,16 @@ add_action( 'ois_cc_reconcile', array( 'OIS_CC_Moneybag_API', 'reconcile_open_or
 add_action(
 	'init',
 	function () {
-		if ( ! wp_next_scheduled( 'ois_cc_reconcile' ) ) {
-			wp_schedule_event( time() + 300, 'ois_cc_every_10_min', 'ois_cc_reconcile' );
+		if ( 'ois_cc_every_3_hours' !== wp_get_schedule( 'ois_cc_reconcile' ) ) {
+			wp_clear_scheduled_hook( 'ois_cc_reconcile' ); // drops the old 10-minute schedule on update
+			wp_schedule_event( time() + 300, 'ois_cc_every_3_hours', 'ois_cc_reconcile' );
 		}
 	}
 );
 add_filter(
 	'cron_schedules',
 	function ( $s ) {
-		$s['ois_cc_every_10_min'] = array( 'interval' => 600, 'display' => 'Every 10 minutes' );
+		$s['ois_cc_every_3_hours'] = array( 'interval' => 3 * HOUR_IN_SECONDS, 'display' => 'Every 3 hours' );
 		return $s;
 	}
 );

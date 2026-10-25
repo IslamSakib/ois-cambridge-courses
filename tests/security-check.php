@@ -122,7 +122,9 @@ $GLOBALS['roles'] = array( 'contributor' );
 check( 'other role denied transactions', array( 'do_not_allow' ) === $admin->map_meta_cap( array(), OIS_CC_Admin::CAP, 5, array() ) );
 
 /* ---- re-check (cron + button): a late success flips an unpaid order, only if it matches ---- */
-$GLOBALS['meta'] = array( 7 => array( '_moneybag_txn_id' => 'TXN7', '_order_number' => 'OIS-7', '_amount' => '5000', '_status' => 'canceled' ) );
+$GLOBALS['meta'] = array( 7 => array( '_moneybag_txn_id' => 'TXN7', '_order_number' => 'OIS-7', '_amount' => '5000', '_status' => 'failed' ) );
+define( 'DAY_IN_SECONDS', 86400 );
+function get_post_time( $f, $gmt, $id ) { return time() - ( isset( $GLOBALS['meta'][ $id ]['_age_days'] ) ? $GLOBALS['meta'][ $id ]['_age_days'] : 0 ) * 86400; }
 function get_post_meta( $id, $k, $single = false ) { return isset( $GLOBALS['meta'][ $id ][ $k ] ) ? $GLOBALS['meta'][ $id ][ $k ] : ''; }
 function update_post_meta( $id, $k, $v ) { $GLOBALS['meta'][ $id ][ $k ] = $v; }
 function get_post( $id ) { return isset( $GLOBALS['meta'][ $id ] ) ? (object) array( 'post_type' => OIS_CC_Orders::POST_TYPE ) : null; }
@@ -134,20 +136,31 @@ $GLOBALS['opts']['ois_cc_moneybag_api_key'] = 'key';
 $GLOBALS['remote'] = array( 'body' => '{"data":{"order_id":"OIS-7","amount":"5000","status":"SUCCESS","verified":true,"currency":"BDT"}}' );
 check( 'late success marks the order paid', 'paid' === OIS_CC_Moneybag_API::recheck_order( 7 ) && 'paid' === $GLOBALS['meta'][7]['_status'] && 'TXN7' === $GLOBALS['meta'][7]['_txn_id'] );
 $GLOBALS['remote'] = array( 'body' => '{"data":{"order_id":"OIS-7","amount":"4000","status":"SUCCESS","verified":true}}' );
-$GLOBALS['meta'][7]['_status'] = 'canceled';
+$GLOBALS['meta'][7]['_status'] = 'failed';
 check( 're-check with underpayment stays unpaid', 'unchanged' === OIS_CC_Moneybag_API::recheck_order( 7 ) && 'paid' !== $GLOBALS['meta'][7]['_status'] );
 $GLOBALS['remote'] = array( 'body' => '{"data":{"order_id":"OIS-7","amount":"5000","status":"FAILED"}}' );
 check( 're-check still failed stays unpaid', 'unchanged' === OIS_CC_Moneybag_API::recheck_order( 7 ) && 'paid' !== $GLOBALS['meta'][7]['_status'] );
 $GLOBALS['remote'] = array( 'code' => 500, 'body' => '{}' );
 check( 'Moneybag error -> error, nothing paid', 'error' === OIS_CC_Moneybag_API::recheck_order( 7 ) && 'paid' !== $GLOBALS['meta'][7]['_status'] );
-check( 'order with nothing to look up is left unchanged', 'unchanged' === OIS_CC_Moneybag_API::recheck_order( 8 ) && 'paid' !== $GLOBALS['meta'][7]['_status'] );
+$GLOBALS['meta'][8] = array( '_status' => 'failed' );
+check( 'failed order with nothing to look up is left unchanged', 'unchanged' === OIS_CC_Moneybag_API::recheck_order( 8 ) && 'paid' !== $GLOBALS['meta'][7]['_status'] );
 // No stored txn id: falls back to the order number, still needs a full match.
-$GLOBALS['meta'][9] = array( '_order_number' => 'OIS-9', '_amount' => '5000', '_status' => 'canceled' );
+$GLOBALS['meta'][9] = array( '_order_number' => 'OIS-9', '_amount' => '5000', '_status' => 'failed' );
 $GLOBALS['remote'] = array( 'body' => '{"data":{"order_id":"OIS-9","amount":"5000","status":"SUCCESS","verified":true,"transaction_id":"TXN9"}}' );
 check( 'no txn id: found by order number, marked paid with the real txn id', 'paid' === OIS_CC_Moneybag_API::recheck_order( 9 ) && 'paid' === $GLOBALS['meta'][9]['_status'] && 'TXN9' === $GLOBALS['meta'][9]['_txn_id'] );
-$GLOBALS['meta'][9] = array( '_order_number' => 'OIS-9', '_amount' => '5000', '_status' => 'canceled' );
+$GLOBALS['meta'][9] = array( '_order_number' => 'OIS-9', '_amount' => '5000', '_status' => 'failed' );
 $GLOBALS['remote'] = array( 'code' => 404, 'body' => '{}' );
 check( 'no txn id: Moneybag does not know it -> unchanged, not an error', 'unchanged' === OIS_CC_Moneybag_API::recheck_order( 9 ) && 'paid' !== $GLOBALS['meta'][9]['_status'] );
+
+// Only Failed orders from the last 3 days are synced: not Canceled, not older.
+$GLOBALS['meta'][10] = array( '_order_number' => 'OIS-10', '_amount' => '5000', '_status' => 'canceled' );
+$GLOBALS['remote'] = array( 'body' => '{"data":{"order_id":"OIS-10","amount":"5000","status":"SUCCESS","verified":true}}' );
+check( 'canceled order is not synced', 'ineligible' === OIS_CC_Moneybag_API::recheck_order( 10 ) && 'paid' !== $GLOBALS['meta'][10]['_status'] );
+$GLOBALS['meta'][11] = array( '_order_number' => 'OIS-11', '_amount' => '5000', '_status' => 'failed', '_age_days' => 4 );
+$GLOBALS['remote'] = array( 'body' => '{"data":{"order_id":"OIS-11","amount":"5000","status":"SUCCESS","verified":true}}' );
+check( 'failed order older than 3 days is not synced', 'ineligible' === OIS_CC_Moneybag_API::recheck_order( 11 ) && 'paid' !== $GLOBALS['meta'][11]['_status'] );
+$GLOBALS['meta'][11]['_age_days'] = 2;
+check( 'failed order within 3 days is synced', 'paid' === OIS_CC_Moneybag_API::recheck_order( 11 ) );
 
 echo $fails ? "\n$fails FAILED\n" : "\nALL PASSED\n";
 exit( $fails ? 1 : 0 );

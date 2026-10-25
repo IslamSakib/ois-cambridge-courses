@@ -128,7 +128,7 @@ class OIS_CC_Transactions_Table extends WP_List_Table {
 		}
 
 		if ( 'paid' !== $item['status'] ) {
-			if ( ! OIS_CC_Moneybag_API::is_live() ) {
+			if ( ! OIS_CC_Moneybag_API::is_live() || ! OIS_CC_Moneybag_API::sync_eligible( $id ) ) {
 				return '—';
 			}
 			return '<a class="button button-small ois-cc-resync" href="' . esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=ois_cc_recheck&order_id=' . $id ), 'ois_cc_recheck_' . $id ) ) . '" onclick="this.classList.add(\'is-syncing\');this.lastChild.textContent=\' Syncing...\'"><span class="dashicons dashicons-update"></span><span> Sync</span></a>';
